@@ -53,9 +53,18 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
             }
             catch (Exception ex)
             {
-                return new CoinRecognitionResult { Success = false, ErrorMessage = $"Errore modello offline: {ex.Message}" };
+                return new CoinRecognitionResult { Success = false, ErrorMessage = $"Errore modello offline: {Describe(ex)}" };
             }
         }, ct);
+
+    /// <summary>Il messaggio esterno di un errore di inizializzazione (es. libreria nativa) non dice la causa: si aggiunge la catena delle eccezioni interne.</summary>
+    private static string Describe(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var e = ex; e is not null && parts.Count < 4; e = e.InnerException)
+            parts.Add($"{e.GetType().Name}: {e.Message}");
+        return string.Join(" -> ", parts);
+    }
 
     private static async Task<InferenceSession> GetSessionAsync(string modelAsset, CancellationToken ct)
     {

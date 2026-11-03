@@ -50,4 +50,19 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
   </ItemGroup>
 
+  <!--
+    Il pacchetto Microsoft.ML.OnnxRuntime contiene le librerie native per Android (dentro onnxruntime.aar) ma anche quelle per
+    Linux, Windows e macOS. Le librerie Linux hanno lo stesso nome di quelle Android (libonnxruntime.so): su un build Linux
+    (GitHub Actions) finivano nell'APK al posto di quelle Android, e sul telefono l'app andava in errore (TypeInitializationException
+    in Microsoft.ML.OnnxRuntime.NativeMethods). Si tengono solo le risorse Android.
+  -->
+  <Target Name="KeepOnlyAndroidOnnxRuntimeNatives" AfterTargets="ResolvePackageAssets;ResolveLockFileCopyLocalFiles">
+    <ItemGroup>
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)"
+        Condition="'%(RuntimeTargetsCopyLocalItems.NuGetPackageId)' == 'Microsoft.ML.OnnxRuntime' And '%(RuntimeTargetsCopyLocalItems.RuntimeIdentifier)' != 'android'" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)"
+        Condition="'%(ReferenceCopyLocalPaths.NuGetPackageId)' == 'Microsoft.ML.OnnxRuntime' And '%(ReferenceCopyLocalPaths.AssetType)' == 'native' And '%(ReferenceCopyLocalPaths.RuntimeIdentifier)' != 'android'" />
+    </ItemGroup>
+  </Target>
+
 </Project>
