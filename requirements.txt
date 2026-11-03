@@ -1,0 +1,9 @@
+# Addestramento ed esportazione (Kaggle / Colab hanno già la maggior parte di questi pacchetti)
+ultralytics
+onnx
+onnxruntime
+
+# Dataset
+pillow
+imagehash
+pyyaml

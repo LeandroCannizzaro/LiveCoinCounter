@@ -1,0 +1,22 @@
+# Ambiente
+.venv/
+__pycache__/
+*.pyc
+
+# Dati e modelli: pesanti e/o personali, non vanno nel repository
+data/
+datasets/raw/
+datasets/processed/
+runs/
+*.pt
+*.onnx
+*.tflite
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+
+# Credenziali
+kaggle.json
+.env
+*.key
