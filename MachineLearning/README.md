@@ -43,6 +43,6 @@ L'addestramento vero si fa su **Kaggle** o **Google Colab** (GPU gratuita); il P
 ## Stato
 
 - [x] Fase 1: struttura, contratto dei dati, convertitore JSON → YOLO
-- [ ] Fase 2: dataset pubblici (download, licenze, deduplica)
+- [x] Fase 2: dataset pubblici (Kaggle e Roboflow scaricati, controllati, importati; SuperDiodo scartato)
 - [x] Fase 3: programma di etichettatura con AI (`CoinLabeler/` (progetto .NET in questa cartella); provato solo per i box, non ancora con una chiave AI reale)
 - [ ] Fasi 4-9: foto proprie, test set, addestramento, integrazione nell'app
