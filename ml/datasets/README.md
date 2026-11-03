@@ -5,8 +5,8 @@ I dati scaricati vanno in `datasets/raw/` (ignorata da git). Mappatura delle cla
 | Fonte | Licenza | Contenuto | Stato |
 |---|---|---|---|
 | Kaggle `janstaffa/euro-coins-dataset` | Apache-2.0 (dichiarata da Kaggle) | 150 foto 720×960, 336 monete, box YOLO, 8 classi | Scaricato e controllato |
-| GitHub `SuperDiodo/euro-coin-dataset` | Nessun file di licenza nel repository (tutti i diritti riservati per default) | Foto per cartella di taglio, senza box | Download in corso (repository molto grande) |
-| Roboflow `euro-currency/euro-coin-detection-tfngl` | Non indicata sulla pagina | 459 immagini originali, 8 classi | Serve account e chiave API Roboflow |
+| GitHub `SuperDiodo/euro-coin-dataset` | Nessun file di licenza nel repository (tutti i diritti riservati per default) | Foto per cartella di taglio, senza box | Non scaricato: il repository pesa più di 1,5 GB, non ha licenza e non ha box. Interrotto e rimosso |
+| Roboflow `euro-currency/euro-coin-detection-tfngl` | Da leggere sulla pagina del dataset (con account) | 459 immagini originali, 8 classi | Da scaricare dalla pagina (formato YOLO) in `datasets/raw/roboflow-euro-currency/` |
 | GitHub `Tanwar-12/Euro-Coin-Detection` | Nessun file di licenza | ~1000 immagini, una sola classe "Coin" | Non scaricato |
 
 ## Scaricare
@@ -14,14 +14,13 @@ I dati scaricati vanno in `datasets/raw/` (ignorata da git). Mappatura delle cla
 ```bash
 python -m kaggle auth login        # una volta
 python -m kaggle datasets download -d janstaffa/euro-coins-dataset -p datasets/raw/kaggle-janstaffa --unzip
-git clone --depth 1 https://github.com/SuperDiodo/euro-coin-dataset datasets/raw/superdiodo
 ```
 
 ## Controllare
 
 ```bash
 python -m coin_ml.yolo_report datasets/raw/kaggle-janstaffa --source kaggle-janstaffa
-python -m coin_ml.dedupe datasets/raw/kaggle-janstaffa datasets/raw/superdiodo
+python -m coin_ml.dedupe datasets/raw/kaggle-janstaffa datasets/raw/<altra_fonte>
 ```
 
 ## Note sul controllo del dataset Kaggle

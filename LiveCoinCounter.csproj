@@ -40,8 +40,8 @@
 
   <!-- Progetti di supporto: la libreria condivisa è referenziata, gli strumenti non fanno parte dell'app -->
   <ItemGroup>
-    <Compile Remove="src\**;tools\**" />
-    <None Remove="src\**;tools\**" />
+    <Compile Remove="src\**;tools\**;ml\**" />
+    <None Remove="src\**;tools\**;ml\**" />
     <ProjectReference Include="src\Recognition.Core\Recognition.Core.csproj" />
   </ItemGroup>
 

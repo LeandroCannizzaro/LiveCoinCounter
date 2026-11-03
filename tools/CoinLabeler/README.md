@@ -1,6 +1,6 @@
 # CoinLabeler
 
-Programma di servizio (.NET 10, console) che etichetta foto di monete euro con l'AI e prepara **coppie immagine + JSON** per l'addestramento del modello offline (vedi issue #2). Il formato JSON è descritto in `coin-ml/schema/coin_label.schema.json`.
+Programma di servizio (.NET 10, console) che etichetta foto di monete euro con l'AI e prepara **coppie immagine + JSON** per l'addestramento del modello offline (vedi issue #2). Il formato JSON è descritto in `ml/schema/coin_label.schema.json`.
 
 ## Come funziona
 

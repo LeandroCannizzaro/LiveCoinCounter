@@ -1,10 +1,10 @@
-# coin-ml
+# ml - dataset, addestramento e valutazione
 
-Dataset, addestramento e valutazione del modello offline di riconoscimento monete euro per l'app [LiveCoinCounter](https://github.com/LeandroCannizzaro/LiveCoinCounter).
+Dataset, addestramento e valutazione del modello offline di riconoscimento monete euro. Questa cartella fa parte del repository di LiveCoinCounter (prima era il repository separato `coin-ml`).
 
-Piano completo: issue [LiveCoinCounter#2](https://github.com/LeandroCannizzaro/LiveCoinCounter/issues/2).
+Piano completo: issue [#2](https://github.com/LeandroCannizzaro/LiveCoinCounter/issues/2).
 
-> Repository **privato**: può contenere foto personali. Dataset, pesi e chiavi non vanno committati (vedi `.gitignore`).
+> Il repository è **privato**: può contenere foto personali. Dataset, pesi e chiavi non vanno committati (vedi `ml/.gitignore`).
 
 ## Struttura
 
@@ -21,9 +21,10 @@ Piano completo: issue [LiveCoinCounter#2](https://github.com/LeandroCannizzaro/L
 
 Ogni immagine ha accanto un file `.json` con lo stesso nome (es. `IMG_0001.jpg` + `IMG_0001.json`), conforme a `schema/coin_label.schema.json`. L'etichetta di ogni moneta è il suo **valore in centesimi**: `1, 2, 5, 10, 20, 50, 100, 200`.
 
-Il formato è prodotto da `tools/CoinLabeler` nel repository dell'app (Fase 3 dell'issue) e convertito per l'addestramento (con `--status auto` si prendono solo le immagini su cui i provider concordano):
+Il formato è prodotto da `tools/CoinLabeler` (Fase 3 dell'issue) e convertito per l'addestramento (con `--status auto` si prendono solo le immagini su cui i provider concordano):
 
 ```bash
+cd ml
 python -m coin_ml.to_yolo cartella_con_immagini_e_json cartella_di_output
 ```
 
@@ -42,5 +43,5 @@ L'addestramento vero si fa su **Kaggle** o **Google Colab** (GPU gratuita); il P
 
 - [x] Fase 1: struttura, contratto dei dati, convertitore JSON → YOLO
 - [ ] Fase 2: dataset pubblici (download, licenze, deduplica)
-- [x] Fase 3: programma di etichettatura con AI (`tools/CoinLabeler` nel repository dell'app; provato solo per i box, non ancora con una chiave AI reale)
+- [x] Fase 3: programma di etichettatura con AI (`tools/CoinLabeler`; provato solo per i box, non ancora con una chiave AI reale)
 - [ ] Fasi 4-9: foto proprie, test set, addestramento, integrazione nell'app
