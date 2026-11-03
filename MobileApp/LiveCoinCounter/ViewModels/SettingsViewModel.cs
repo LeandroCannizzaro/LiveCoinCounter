@@ -108,6 +108,24 @@ public class SettingsViewModel : INotifyPropertyChanged
 
     public string FooterText => $"LiveCoinCounter v1.0 · {SelectedProfile.DisplayName}";
 
+    public bool CollectPhotos
+    {
+        get => PhotoCollectionService.Enabled;
+        set
+        {
+            PhotoCollectionService.Enabled = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CollectedSummary));
+        }
+    }
+
+    public int CollectedCount => PhotoCollectionService.Count;
+    public bool HasCollectedPhotos => CollectedCount > 0;
+    public string CollectedSummary => CollectPhotos
+        ? $"Raccolta attiva: {CollectedCount} foto salvate."
+        : $"Raccolta spenta ({CollectedCount} foto salvate in precedenza).";
+
+    public ICommand ExportPhotosCommand { get; }
     public ICommand SaveCommand { get; }
     public ICommand TestCommand { get; }
     public ICommand OpenKeyPageCommand { get; }
@@ -115,6 +133,7 @@ public class SettingsViewModel : INotifyPropertyChanged
     public SettingsViewModel()
     {
         _selectedProfile = RecognizerCatalog.Get(SettingsService.ActiveRecognizerId);
+        ExportPhotosCommand = new Command(async () => await PhotoCollectionService.ExportAsync());
         SaveCommand = new Command(async () => await SaveAsync(), () => !IsBusy);
         TestCommand = new Command(async () => await TestAsync(), () => !IsBusy);
         OpenKeyPageCommand = new Command(async () =>

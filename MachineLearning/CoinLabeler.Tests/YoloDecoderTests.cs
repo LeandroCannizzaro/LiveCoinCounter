@@ -90,3 +90,36 @@ public class YoloDecoderTests
         Assert.Equal(0f, tensor[1]);               // R pixel 1
     }
 }
+
+public class DetectionQualityTests
+{
+    [Fact]
+    public void Confident_separate_coins_have_no_warning()
+    {
+        var detections = new[] { new Detection(7, 0.9f, 0, 0, 50, 50), new Detection(6, 0.8f, 100, 0, 50, 50) };
+        Assert.Null(DetectionQuality.Warning(detections));
+    }
+
+    [Fact]
+    public void Low_confidence_is_reported()
+    {
+        var detections = new[] { new Detection(7, 0.9f, 0, 0, 50, 50), new Detection(6, 0.4f, 100, 0, 50, 50) };
+        Assert.Contains("poco riconoscibile", DetectionQuality.Warning(detections));
+    }
+
+    [Fact]
+    public void Overlap_of_different_classes_is_reported()
+    {
+        var detections = new[] { new Detection(7, 0.9f, 0, 0, 50, 50), new Detection(6, 0.9f, 5, 5, 50, 50) };
+        Assert.Contains("si sovrappongono", DetectionQuality.Warning(detections));
+    }
+
+    [Fact]
+    public void Agnostic_nms_removes_same_coin_counted_with_two_classes()
+    {
+        var kept = YoloDecoder.NonMaxSuppression(
+            new List<Detection> { new(7, 0.9f, 0, 0, 50, 50), new(6, 0.6f, 2, 2, 50, 50) }, 0.6f, classAgnostic: true);
+        Assert.Single(kept);
+        Assert.Equal(7, kept[0].ClassIndex);
+    }
+}

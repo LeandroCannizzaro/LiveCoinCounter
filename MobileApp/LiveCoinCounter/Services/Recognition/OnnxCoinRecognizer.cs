@@ -1,5 +1,6 @@
 using Android.Graphics;
 using LiveCoinCounter.Models;
+using LiveCoinCounter.Services;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -15,7 +16,8 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
     private const string ModelAsset = "coin_model.onnx";
     private const int InputSize = 640;
     private const float ConfidenceThreshold = 0.25f;
-    private const float IouThreshold = 0.7f;
+    private const float IouThreshold = 0.6f;
+    private const bool ClassAgnosticNms = true;   // una moneta non si conta due volte con tagli diversi
 
     // La sessione costa (caricamento del modello): una sola per processo
     private static readonly SemaphoreSlim LoadLock = new(1, 1);
@@ -69,8 +71,7 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
 
     private static CoinRecognitionResult Recognize(InferenceSession session, byte[] imageBytes)
     {
-        using var source = BitmapFactory.DecodeByteArray(imageBytes, 0, imageBytes.Length)
-            ?? throw new InvalidOperationException("Immagine non decodificabile.");
+        using var source = ImageHelper.DecodeUpright(imageBytes);
 
         var letterbox = Letterbox.For(source.Width, source.Height, InputSize);
         var pixels = DrawLetterboxed(source, letterbox);
@@ -83,7 +84,7 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
         // forma [1, 4 + classi, ancore]
         var channels = output.Dimensions[1];
         var anchors = output.Dimensions[2];
-        var detections = YoloDecoder.Decode(output.ToArray(), anchors, channels - 4, ConfidenceThreshold, IouThreshold);
+        var detections = YoloDecoder.Decode(output.ToArray(), anchors, channels - 4, ConfidenceThreshold, IouThreshold, ClassAgnosticNms);
 
         var result = new CoinRecognitionResult { Success = true };
         foreach (var group in detections.GroupBy(d => d.ClassIndex).OrderByDescending(g => YoloDecoder.ClassCents[g.Key]))
@@ -95,6 +96,14 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
                 Count = group.Count()
             });
         }
+
+        result.Detections = detections.Select(d =>
+        {
+            var box = letterbox.ToImage(d);
+            return new DetectedCoin(YoloDecoder.ClassNames[d.ClassIndex], YoloDecoder.ClassCents[d.ClassIndex],
+                d.Confidence, box.X, box.Y, box.Width, box.Height);
+        }).ToList();
+        result.Warning = DetectionQuality.Warning(detections);
 
         result.RawResponse = detections.Count == 0
             ? "Nessuna moneta rilevata."

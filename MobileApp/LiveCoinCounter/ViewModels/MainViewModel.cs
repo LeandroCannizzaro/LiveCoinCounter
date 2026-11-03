@@ -23,6 +23,10 @@ public class MainViewModel : INotifyPropertyChanged
     private ImageSource? _capturedImage;
     private byte[]? _capturedImageBytes;
     private CoinRecognitionResult? _lastResult;
+    private string? _collectedId;
+    private string? _warning;
+    private bool _canRetryWithAi;
+    private bool _canReportWrong;
 
     #endregion
 
@@ -66,6 +70,27 @@ public class MainViewModel : INotifyPropertyChanged
         set => SetProperty(ref _coinResults, value);
     }
 
+    /// <summary>Avviso del rilevatore sul dispositivo quando non è sicuro del risultato.</summary>
+    public string? Warning
+    {
+        get => _warning;
+        set { if (SetProperty(ref _warning, value)) OnPropertyChanged(nameof(HasWarning)); }
+    }
+
+    public bool HasWarning => !string.IsNullOrEmpty(Warning);
+
+    public bool CanRetryWithAi
+    {
+        get => _canRetryWithAi;
+        set => SetProperty(ref _canRetryWithAi, value);
+    }
+
+    public bool CanReportWrong
+    {
+        get => _canReportWrong;
+        set => SetProperty(ref _canReportWrong, value);
+    }
+
     public ImageSource? CapturedImage
     {
         get => _capturedImage;
@@ -79,6 +104,8 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand TakePhotoCommand { get; }
     public ICommand PickPhotoCommand { get; }
     public ICommand AnalyzeCommand { get; }
+    public ICommand RetryWithAiCommand { get; }
+    public ICommand ReportWrongCommand { get; }
     public ICommand ResetCommand { get; }
     public ICommand OpenSettingsCommand { get; }
 
@@ -89,6 +116,8 @@ public class MainViewModel : INotifyPropertyChanged
         TakePhotoCommand = new Command(async () => await TakePhotoAsync(), () => IsIdle);
         PickPhotoCommand = new Command(async () => await PickPhotoAsync(), () => IsIdle);
         AnalyzeCommand = new Command(async () => await AnalyzeAsync(), () => IsIdle && _capturedImageBytes != null);
+        RetryWithAiCommand = new Command(async () => await RetryWithAiAsync(), () => IsIdle && _capturedImageBytes != null);
+        ReportWrongCommand = new Command(ReportWrong);
         ResetCommand = new Command(Reset);
         OpenSettingsCommand = new Command(async () => await OpenSettingsAsync());
     }
@@ -144,6 +173,7 @@ public class MainViewModel : INotifyPropertyChanged
     private async Task LoadPhotoAsync(FileResult photo)
     {
         HasResult = false;
+        ClearOutcome();
         CoinResults = new();
         TotalValue = "--,-- €";
         TotalCoins = 0;
@@ -173,6 +203,23 @@ public class MainViewModel : INotifyPropertyChanged
             return;
         }
 
+        await RunAsync(recognizer, isRetry: false);
+    }
+
+    /// <summary>Rifà l'analisi con l'AI in rete (Gemini, con la chiave salvata o quella predefinita).</summary>
+    private async Task RetryWithAiAsync()
+    {
+        if (_capturedImageBytes is null) return;
+
+        var gemini = RecognizerCatalog.Get("gemini");
+        var recognizer = await RecognizerFactory.CreateWithFallbackAsync(gemini, await SettingsService.GetConfigAsync(gemini));
+        await RunAsync(recognizer, isRetry: true);
+    }
+
+    private async Task RunAsync(ICoinRecognizer recognizer, bool isRetry)
+    {
+        if (_capturedImageBytes is null) return;
+
         IsAnalyzing = true;
         HasResult = false;
         StatusMessage = $"🔍 Analisi in corso ({recognizer.DisplayName})...";
@@ -190,14 +237,35 @@ public class MainViewModel : INotifyPropertyChanged
                 TotalValue = result.TotalValueFormatted;
                 TotalCoins = result.TotalCoinCount;
                 HasResult = true;
+                Warning = result.Warning;
                 StatusMessage = result.Coins.Count > 0
                     ? $"✅ Trovate {result.TotalCoinCount} monete"
                     : "⚠️ Nessuna moneta riconosciuta nell'immagine.";
+
+                if (result.Detections.Count > 0)
+                {
+                    var annotated = ImageHelper.DrawDetections(_capturedImageBytes, result.Detections);
+                    CapturedImage = ImageSource.FromStream(() => new MemoryStream(annotated));
+                }
+
+                if (isRetry)
+                {
+                    if (_collectedId is not null) PhotoCollectionService.AttachAiResult(_collectedId, recognizer.Id, result);
+                }
+                else
+                {
+                    _collectedId = PhotoCollectionService.Save(_capturedImageBytes, result, recognizer.Id);
+                }
+
+                // l'AI si propone solo se il risultato sul dispositivo è dubbio o vuoto, e non l'abbiamo già chiesta
+                CanRetryWithAi = !isRetry && !recognizer.RequiresNetwork && (result.IsUncertain || result.Coins.Count == 0);
+                CanReportWrong = _collectedId is not null;
             }
             else
             {
                 StatusMessage = $"❌ {result.ErrorMessage}";
                 HasResult = false;
+                CanRetryWithAi = !isRetry && !recognizer.RequiresNetwork;
             }
         }
         catch (Exception ex)
@@ -211,10 +279,27 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private void ReportWrong()
+    {
+        if (_collectedId is null) return;
+        PhotoCollectionService.MarkWrong(_collectedId);
+        CanReportWrong = false;
+        StatusMessage = "Grazie: la foto è stata segnalata e servirà a migliorare il riconoscimento.";
+    }
+
+    private void ClearOutcome()
+    {
+        _collectedId = null;
+        Warning = null;
+        CanRetryWithAi = false;
+        CanReportWrong = false;
+    }
+
     private void Reset()
     {
         _capturedImageBytes = null;
         _lastResult = null;
+        ClearOutcome();
         CapturedImage = null;
         CoinResults = new();
         HasResult = false;
@@ -222,6 +307,7 @@ public class MainViewModel : INotifyPropertyChanged
         TotalCoins = 0;
         StatusMessage = "Scatta o carica una foto delle monete";
         ((Command)AnalyzeCommand).ChangeCanExecute();
+        ((Command)RetryWithAiCommand).ChangeCanExecute();
     }
 
     private async Task OpenSettingsAsync()
@@ -235,6 +321,7 @@ public class MainViewModel : INotifyPropertyChanged
         ((Command)TakePhotoCommand).ChangeCanExecute();
         ((Command)PickPhotoCommand).ChangeCanExecute();
         ((Command)AnalyzeCommand).ChangeCanExecute();
+        ((Command)RetryWithAiCommand).ChangeCanExecute();
     }
 
     #endregion

@@ -102,6 +102,22 @@
                         IsEnabled="{Binding IsIdle}" />
             </Grid>
 
+            <!-- Avviso del rilevatore + scorciatoia all'AI (visibili solo quando servono) -->
+            <Border IsVisible="{Binding HasWarning}"
+                    Margin="16,0,16,12" Padding="14,10"
+                    StrokeThickness="1" Stroke="#FF9800"
+                    BackgroundColor="{AppThemeBinding Light=#FFF3E0, Dark=#3E2A10}"
+                    StrokeShape="RoundRectangle 12">
+                <Label Text="{Binding Warning}" FontSize="13"
+                       TextColor="{AppThemeBinding Light=#7A4A00, Dark=#FFCC80}" />
+            </Border>
+
+            <Button Text="🌐 Riprova con l'AI"
+                    Command="{Binding RetryWithAiCommand}"
+                    IsVisible="{Binding CanRetryWithAi}"
+                    Margin="16,0,16,12" FontSize="13" CornerRadius="12"
+                    BackgroundColor="#FF9800" TextColor="Black" />
+
             <!-- ============================================================
                  SEZIONE 4: Riepilogo totale (visibile solo dopo analisi)
                  ============================================================ -->
@@ -208,6 +224,15 @@
                     </CollectionView.ItemTemplate>
                 </CollectionView>
             </VerticalStackLayout>
+
+            <Button Text="👎 Il conteggio è sbagliato"
+                    Command="{Binding ReportWrongCommand}"
+                    IsVisible="{Binding CanReportWrong}"
+                    Margin="16,12,16,0" FontSize="12" CornerRadius="12"
+                    BackgroundColor="Transparent"
+                    BorderWidth="1"
+                    BorderColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray600}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
 
             <!-- ============================================================
                  SEZIONE 6: Suggerimento iniziale

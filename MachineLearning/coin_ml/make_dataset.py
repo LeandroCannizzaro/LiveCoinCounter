@@ -1,11 +1,15 @@
 """Unisce i dataset importati in uno solo per l'addestramento, con divisione train / val / test senza fughe.
 
-- Roboflow: si tengono le sue divisioni originali (train / valid / test).
-- Kaggle: le foto molto simili (stessa scena ripresa più volte, hash percettivo) restano nello stesso gruppo e
-  quindi nello stesso insieme; i gruppi sono assegnati a caso (seme fisso) a train / val / test.
+Tutte le sorgenti vengono messe insieme e le foto molto simili (stessa scena ripresa più volte, hash percettivo)
+restano nello stesso gruppo, quindi nello stesso insieme: i gruppi sono assegnati a caso (seme fisso) a
+train / val / test. Le divisioni originali delle sorgenti si ignorano apposta: tra train e test di Roboflow
+c'erano scene quasi uguali.
 
-Uso: python -m coin_ml.make_dataset <kaggle_dir> <roboflow_processed_dir> <output> [--seed 42]
-Crea <output>/images/{train,val,test}, <output>/labels/..., <output>/splits.json e <output>/code/scoring.py
+Una sorgente è una cartella con images/ e labels/, oppure con train|valid|test/{images,labels} (export Roboflow).
+
+Uso: python -m coin_ml.make_dataset <output> --source kg <cartella> --source rf <cartella> [--seed 42]
+Crea <output>/images/{train,val,test}, <output>/labels/..., i banchi di prova con ombre
+(<output>/images/{val,test}_shadow), <output>/splits.json e <output>/code/scoring.py
 (il file di valutazione viaggia col dataset così l'addestramento su Kaggle lo trova).
 """
 import argparse
@@ -14,13 +18,17 @@ import random
 import shutil
 from pathlib import Path
 
+import cv2
 import imagehash
+import numpy as np
 from PIL import Image
+
+from coin_ml.stress import stress
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 
-def group_similar(images: list[Path], max_distance: int = 4) -> list[list[Path]]:
+def group_similar(images: list[Path], max_distance: int = 10) -> list[list[Path]]:
     """Raggruppa le immagini simili (componenti connesse sulla distanza dell'hash percettivo)."""
     hashes = []
     for path in images:
@@ -66,9 +74,18 @@ def split_groups(groups: list[list[Path]], val_fraction: float, test_fraction: f
     return result
 
 
-def copy_pair(image: Path, labels_dir: Path, out: Path, split: str, prefix: str) -> None:
-    label = labels_dir / f"{image.stem}.txt"
-    name = f"{prefix}_{image.stem}"
+def find_pairs(source: Path) -> list[tuple[Path, Path]]:
+    """(immagine, file etichette) di una sorgente, con o senza le sue divisioni."""
+    folders = [source] if (source / "images").exists() else [source / n for n in ("train", "valid", "test")]
+    pairs = []
+    for folder in folders:
+        for image in sorted((folder / "images").glob("*")):
+            if image.suffix.lower() in IMAGE_SUFFIXES:
+                pairs.append((image, folder / "labels" / f"{image.stem}.txt"))
+    return pairs
+
+
+def copy_pair(image: Path, label: Path, out: Path, split: str, name: str) -> None:
     (out / "images" / split).mkdir(parents=True, exist_ok=True)
     (out / "labels" / split).mkdir(parents=True, exist_ok=True)
     shutil.copy2(image, out / "images" / split / f"{name}{image.suffix}")
@@ -76,28 +93,40 @@ def copy_pair(image: Path, labels_dir: Path, out: Path, split: str, prefix: str)
     (out / "labels" / split / f"{name}.txt").write_text(text, encoding="utf-8")
 
 
-def build(kaggle: Path, roboflow: Path, out: Path, seed: int = 42) -> dict:
+def make_shadow_sets(out: Path, seed: int) -> None:
+    """Banco di prova con ombre: le foto di val e test peggiorate da codice (stesse etichette, sempre uguali)."""
+    rng = np.random.default_rng(seed)
+    for split in ("val", "test"):
+        target_images = out / "images" / f"{split}_shadow"
+        target_labels = out / "labels" / f"{split}_shadow"
+        target_images.mkdir(parents=True, exist_ok=True)
+        target_labels.mkdir(parents=True, exist_ok=True)
+        for image_path in sorted((out / "images" / split).glob("*")):
+            image = cv2.imread(str(image_path))
+            cv2.imwrite(str(target_images / f"{image_path.stem}.jpg"), stress(image, rng), [cv2.IMWRITE_JPEG_QUALITY, 92])
+            shutil.copy2(out / "labels" / split / f"{image_path.stem}.txt", target_labels / f"{image_path.stem}.txt")
+
+
+def build(sources: dict[str, Path], out: Path, seed: int = 42, max_distance: int = 10) -> dict:
     if out.exists():
         shutil.rmtree(out)
 
+    entries: dict[Path, tuple[str, Path]] = {}   # immagine -> (nome nel dataset, etichette)
+    for prefix, source in sources.items():
+        for image, label in find_pairs(source):
+            entries[image] = (f"{prefix}_{image.stem}", label)
+
+    groups = group_similar(sorted(entries), max_distance)
     manifest: dict[str, dict[str, int]] = {"train": {}, "val": {}, "test": {}}
-
-    # Roboflow: divisioni originali
-    for rf_split, split in (("train", "train"), ("valid", "val"), ("test", "test")):
-        images = [p for p in sorted((roboflow / rf_split / "images").glob("*")) if p.suffix.lower() in IMAGE_SUFFIXES]
-        for image in images:
-            copy_pair(image, roboflow / rf_split / "labels", out, split, "rf")
-        manifest[split]["roboflow"] = len(images)
-
-    # Kaggle: divisione per gruppi di foto simili
-    kaggle_images = [p for p in sorted((kaggle / "images").glob("*")) if p.suffix.lower() in IMAGE_SUFFIXES]
-    groups = group_similar(kaggle_images)
     for split, images in split_groups(groups, 0.1, 0.1, seed).items():
         for image in images:
-            copy_pair(image, kaggle / "labels", out, split, "kg")
-        manifest[split]["kaggle"] = len(images)
+            name, label = entries[image]
+            copy_pair(image, label, out, split, name)
+            prefix = name.split("_", 1)[0]
+            manifest[split][prefix] = manifest[split].get(prefix, 0) + 1
 
-    (out / "splits.json").write_text(json.dumps({"seed": seed, "images": manifest}, indent=2), encoding="utf-8")
+    make_shadow_sets(out, seed)
+    (out / "splits.json").write_text(json.dumps({"seed": seed, "max_distance": max_distance, "images": manifest}, indent=2), encoding="utf-8")
     (out / "code").mkdir(parents=True, exist_ok=True)
     shutil.copy2(Path(__file__).with_name("scoring.py"), out / "code" / "scoring.py")
     return manifest
@@ -105,14 +134,14 @@ def build(kaggle: Path, roboflow: Path, out: Path, seed: int = 42) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("kaggle", type=Path)
-    parser.add_argument("roboflow", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--source", nargs=2, action="append", metavar=("PREFISSO", "CARTELLA"), required=True)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-distance", type=int, default=10, help="distanza massima dell'hash percettivo tra foto dello stesso gruppo")
     parser.add_argument("--kaggle-id", help="es. utente/coin-dataset: scrive dataset-metadata.json per il caricamento su Kaggle")
     args = parser.parse_args()
 
-    for split, counts in build(args.kaggle, args.roboflow, args.output, args.seed).items():
+    for split, counts in build({p: Path(d) for p, d in args.source}, args.output, args.seed, args.max_distance).items():
         print(f"{split}: {sum(counts.values())} immagini  {counts}")
 
     if args.kaggle_id:
@@ -120,5 +149,5 @@ if __name__ == "__main__":
             "title": args.kaggle_id.split("/")[1],
             "id": args.kaggle_id,
             "licenses": [{"name": "other"}],
-            "description": "Kaggle janstaffa (Apache-2.0) + Roboflow euro-currency (CC BY 4.0); divisione train/val/test senza fughe."
+            "description": "Dataset di monete euro (fonti: vedi datasets/README.md); divisione per gruppi di foto simili, con banchi di prova con ombre."
         }, indent=2), encoding="utf-8")

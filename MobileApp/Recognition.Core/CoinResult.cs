@@ -34,6 +34,9 @@ public class CoinResult
         $"{Count}x {DenominationFormatted} = {TotalValueFormatted}";
 }
 
+/// <summary>Una singola moneta trovata da un rilevatore sul dispositivo: riquadro in pixel dell'immagine analizzata.</summary>
+public record DetectedCoin(string Denomination, int ValueInCents, float Confidence, float X, float Y, float Width, float Height);
+
 /// <summary>
 /// Risultato complessivo dell'analisi di un'immagine.
 /// </summary>
@@ -54,6 +57,14 @@ public class CoinRecognitionResult
     }
 
     public int TotalCoinCount => Coins.Sum(c => c.Count);
+
+    /// <summary>Monete rilevate una per una (solo per i metodi sul dispositivo): servono a disegnare i riquadri sulla foto.</summary>
+    public List<DetectedCoin> Detections { get; set; } = new();
+
+    /// <summary>Motivo per cui il risultato potrebbe essere sbagliato, se il rilevatore ha dei dubbi.</summary>
+    public string? Warning { get; set; }
+
+    public bool IsUncertain => Warning is not null;
 
     /// <summary>Testo grezzo restituito dall'AI</summary>
     public string? RawResponse { get; set; }

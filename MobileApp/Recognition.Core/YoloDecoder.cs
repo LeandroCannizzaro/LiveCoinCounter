@@ -18,7 +18,7 @@ public static class YoloDecoder
     /// <param name="output">tensore appiattito [canali x ancore]: il canale c dell'ancora a sta in output[c * anchors + a]</param>
     public static List<Detection> Decode(
         ReadOnlySpan<float> output, int anchors, int classes,
-        float confidenceThreshold = 0.25f, float iouThreshold = 0.7f)
+        float confidenceThreshold = 0.25f, float iouThreshold = 0.7f, bool classAgnostic = false)
     {
         if (output.Length != (4 + classes) * anchors)
             throw new ArgumentException($"Uscita di {output.Length} valori, attesi {(4 + classes) * anchors}.");
@@ -43,16 +43,19 @@ public static class YoloDecoder
             candidates.Add(new Detection(best, bestScore, cx - w / 2, cy - h / 2, w, h));
         }
 
-        return NonMaxSuppression(candidates, iouThreshold);
+        return NonMaxSuppression(candidates, iouThreshold, classAgnostic);
     }
 
-    /// <summary>NMS per classe: tiene il riquadro più sicuro e scarta quelli della stessa classe che lo coprono troppo.</summary>
-    public static List<Detection> NonMaxSuppression(List<Detection> detections, float iouThreshold)
+    /// <summary>
+    /// NMS: tiene il riquadro più sicuro e scarta quelli che lo coprono troppo. Con <paramref name="classAgnostic"/> il
+    /// confronto vale anche tra classi diverse: la stessa moneta non può essere contata due volte con tagli diversi.
+    /// </summary>
+    public static List<Detection> NonMaxSuppression(List<Detection> detections, float iouThreshold, bool classAgnostic = false)
     {
         var kept = new List<Detection>();
         foreach (var candidate in detections.OrderByDescending(d => d.Confidence))
         {
-            if (!kept.Any(k => k.ClassIndex == candidate.ClassIndex && Iou(k, candidate) > iouThreshold))
+            if (!kept.Any(k => (classAgnostic || k.ClassIndex == candidate.ClassIndex) && Iou(k, candidate) > iouThreshold))
                 kept.Add(candidate);
         }
         return kept;
@@ -68,6 +71,34 @@ public static class YoloDecoder
         var intersection = Math.Max(0, right - left) * Math.Max(0, bottom - top);
         var union = a.Width * a.Height + b.Width * b.Height - intersection;
         return union <= 0 ? 0 : intersection / union;
+    }
+}
+
+/// <summary>Decide se un risultato del rilevatore merita un avviso all'utente.</summary>
+public static class DetectionQuality
+{
+    public const float LowConfidence = 0.55f;
+    public const float OverlapWarning = 0.3f;
+
+    /// <returns>Il testo dell'avviso, oppure null se il risultato sembra affidabile.</returns>
+    public static string? Warning(IReadOnlyList<Detection> detections)
+    {
+        if (detections.Count == 0) return null;
+
+        var reasons = new List<string>();
+        var low = detections.Count(d => d.Confidence < LowConfidence);
+        if (low > 0)
+            reasons.Add(low == 1 ? "una moneta è poco riconoscibile" : $"{low} monete sono poco riconoscibili");
+
+        for (var i = 0; i < detections.Count && reasons.Count < 2; i++)
+            for (var j = i + 1; j < detections.Count; j++)
+                if (detections[i].ClassIndex != detections[j].ClassIndex && YoloDecoder.Iou(detections[i], detections[j]) > OverlapWarning)
+                {
+                    reasons.Add("due monete di taglio diverso si sovrappongono");
+                    break;
+                }
+
+        return reasons.Count == 0 ? null : "Risultato incerto: " + string.Join(", ", reasons) + ".";
     }
 }
 

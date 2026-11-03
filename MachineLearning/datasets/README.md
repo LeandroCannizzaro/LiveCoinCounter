@@ -44,3 +44,17 @@ python -m coin_ml.dedupe datasets/raw/kaggle-janstaffa datasets/raw/<altra_fonte
 - Tutte le immagini sono **stirate a 640×640** (le foto originali non sono quadrate), quindi le monete risultano leggermente ovali.
 - Nessun duplicato tra Roboflow e Kaggle né tra train, valid e test di Roboflow (hash percettivo, distanza ≤ 4).
 - Il controllo di duplicati dentro Kaggle segnala 17 coppie, probabilmente falsi allarmi dovuti agli sfondi uniformi: da verificare prima di usarle per dividere train e test.
+
+## Fonti valutate e non usate (issue #3)
+
+Cercando altri dati già etichettati ho guardato tre dataset Kaggle, tutti con **licenza "Unknown"/non dichiarata**; non sono stati importati e i file scaricati sono stati cancellati, per non mescolare nel modello dati di cui non si può dire l'origine:
+
+- `bastianberle/eurocoins-images-object-detection`: 91 foto reali da 3024 px, etichette VOC (classi 1…200 in centesimi), ~900 monete. Il più promettente: se la licenza si chiarisce, l'import è semplice (VOC → YOLO con la rimappatura già usata per Roboflow).
+- `davidemartinelli710/euro-coins-and-bills`: 12 classi (0-3 banconote, 4 = 2 €, 5 = 1 €, 6 = 50 ct, 7 = 20 ct, 8 = 10 ct, 9 = 5 ct, 10 = 2 ct, 11 = 1 ct), ma sono primi piani di una sola moneta presi da internet e molte copie aumentate: poco utile per contare monete in una foto.
+- `angelocao339/money-count-corr1`: non scaricato (download interrotto), contenuto non verificato.
+
+## Divisione e banchi di prova
+
+`coin_ml.make_dataset` mette insieme tutte le sorgenti e raggruppa le foto simili (hash percettivo, distanza ≤ 10) prima di dividere in train / val / test (80/10/10), ignorando le divisioni originali: tra train e test di Roboflow c'erano scene quasi uguali. Crea anche `val_shadow` e `test_shadow`: le stesse foto di val e test con ombre e luce non uniforme aggiunte da codice (`coin_ml.stress`, sempre uguali per uno stesso seme).
+
+`coin_ml.synth` aggiunge al train foto sintetiche (`syn_*`): monete ritagliate dal train, portate alla stessa scala fisica con i diametri noti, incollate su sfondi veri senza monete o procedurali, con ombra propria e ombre globali. Le etichette sono esatte per costruzione; val e test restano solo reali.

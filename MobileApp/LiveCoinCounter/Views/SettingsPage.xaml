@@ -105,6 +105,31 @@
                 </VerticalStackLayout>
             </Border>
 
+            <!-- Raccolta facoltativa di foto per migliorare il modello -->
+            <Label Text="🧪 MIGLIORA IL RICONOSCIMENTO"
+                   FontSize="11" FontAttributes="Bold" Margin="20,12,20,4"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+            <Border Margin="16,0,16,8" Padding="16"
+                    StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                    StrokeShape="RoundRectangle 12"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                <VerticalStackLayout Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="Salva le foto analizzate sul telefono" FontSize="14" VerticalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                        <Switch Grid.Column="1" IsToggled="{Binding CollectPhotos}" />
+                    </Grid>
+                    <Label Text="Spento di default. Le foto non lasciano il telefono: puoi esportarle tu, quando vuoi, per addestrare un modello migliore."
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                    <Label Text="{Binding CollectedSummary}" FontSize="12" />
+                    <Button Text="📤 Esporta foto raccolte" Command="{Binding ExportPhotosCommand}"
+                            IsVisible="{Binding HasCollectedPhotos}" CornerRadius="10"
+                            BackgroundColor="{StaticResource Secondary}" />
+                </VerticalStackLayout>
+            </Border>
+
             <!-- Titolo sezione informazioni -->
             <Label Text="ℹ️ INFORMAZIONI"
                    FontSize="11"
