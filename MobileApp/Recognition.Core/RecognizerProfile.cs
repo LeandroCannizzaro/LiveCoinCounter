@@ -5,7 +5,8 @@ public enum RecognizerKind
     Gemini,
     Anthropic,
     OpenAiCompatible,
-    Offline
+    Offline,
+    OnDeviceModel
 }
 
 /// <summary>
@@ -23,7 +24,7 @@ public sealed record RecognizerProfile(
     string Note,
     bool BaseUrlEditable = false)
 {
-    public bool IsOffline => Kind == RecognizerKind.Offline;
+    public bool IsOffline => Kind is RecognizerKind.Offline or RecognizerKind.OnDeviceModel;
     public override string ToString() => DisplayName;
 }
 
@@ -102,7 +103,12 @@ public static class RecognizerCatalog
             "Per server propri (Ollama, LM Studio, vLLM...). Serve un indirizzo HTTPS: l'app blocca il traffico HTTP in chiaro.",
             BaseUrlEditable: true),
 
-        new RecognizerProfile("offline", "Offline (sperimentale)", RecognizerKind.Offline,
+        new RecognizerProfile("offline-model", "Offline (modello addestrato)", RecognizerKind.OnDeviceModel,
+            "", Array.Empty<string>(),
+            false, "", null,
+            "Modello di visione addestrato su foto di monete euro, eseguito sul telefono: senza rete e senza inviare la foto. Funziona meglio con monete ben separate su sfondo uniforme."),
+
+        new RecognizerProfile("offline", "Offline (euristico, sperimentale)", RecognizerKind.Offline,
             "", Array.Empty<string>(),
             false, "", null,
             "Funziona senza rete e senza inviare la foto. Metodo sperimentale basato su dimensioni e colore: è meno accurato dell'AI.")

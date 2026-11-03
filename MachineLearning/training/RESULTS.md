@@ -44,3 +44,9 @@ python -m kaggle kernels status canlea/coin-yolo-baseline
 python -m kaggle kernels output canlea/coin-yolo-baseline -p "<percorso assoluto>\runs\baseline1"
 ```
 Su Windows servono percorsi **assoluti**: con quelli relativi la CLI di Kaggle fallisce. Per aggiornare un dataset già creato si usa `datasets version` al posto di `create`.
+
+## Uso del modello nell'app
+
+L'app (`MobileApp/LiveCoinCounter`) include il modello come asset `Resources/Raw/coin_model.onnx`, copia di `runs/baseline1/best.onnx`,
+ed e' eseguito da `OnnxCoinRecognizer` (profilo "Offline (modello addestrato)", soglia 0,25, NMS 0,7 come nella valutazione).
+Per aggiornarlo dopo un nuovo addestramento basta sostituire quel file e ricompilare. Richiede Android 7.0 (API 24) per ONNX Runtime.

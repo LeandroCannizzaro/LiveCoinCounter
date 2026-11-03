@@ -99,7 +99,7 @@ public class SettingsViewModel : INotifyPropertyChanged
     public string ApiKeyPlaceholder => SelectedProfile.KeyPlaceholder;
 
     public string ModelSummary => SelectedProfile.IsOffline
-        ? "Analisi sul dispositivo (sperimentale)"
+        ? SelectedProfile.Kind == RecognizerKind.OnDeviceModel ? "Modello addestrato sul dispositivo" : "Analisi sul dispositivo (sperimentale)"
         : $"{SelectedProfile.DisplayName} · {(string.IsNullOrWhiteSpace(Model) ? SelectedProfile.Models.FirstOrDefault() : Model)}";
 
     public string PrivacyText => SelectedProfile.IsOffline
