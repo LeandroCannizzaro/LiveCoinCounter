@@ -7,24 +7,34 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 namespace LiveCoinCounter.Services.Recognition;
 
 /// <summary>
-/// Riconoscimento sul dispositivo con il modello YOLO11n addestrato (MachineLearning/training, asset "coin_model.onnx").
-/// Un solo passaggio: il modello trova ogni moneta e ne dice direttamente il taglio.
+/// Riconoscimento sul dispositivo con un modello YOLO addestrato (MachineLearning/training) in formato ONNX.
+/// Il file è l'asset indicato dal profilo (RecognizerProfile.ModelAsset) e la risoluzione di ingresso si legge dal modello,
+/// quindi aggiungere un modello non richiede codice. Un solo passaggio: il modello trova ogni moneta e ne dice direttamente il taglio.
 /// Nessuna rete e nessun dato esce dal telefono.
 /// </summary>
 public sealed class OnnxCoinRecognizer : ICoinRecognizer
 {
-    private const string ModelAsset = "coin_model.onnx";
-    private const int InputSize = 640;
+    private const int DefaultInputSize = 640;
     private const float ConfidenceThreshold = 0.25f;
     private const float IouThreshold = 0.6f;
     private const bool ClassAgnosticNms = true;   // una moneta non si conta due volte con tagli diversi
 
-    // La sessione costa (caricamento del modello): una sola per processo
+    // La sessione costa (caricamento del modello): si tiene solo l'ultima usata, per non occupare memoria con tutti i modelli
     private static readonly SemaphoreSlim LoadLock = new(1, 1);
     private static InferenceSession? _session;
+    private static string? _sessionAsset;
 
-    public string Id => "offline-model";
-    public string DisplayName => "Offline (modello addestrato)";
+    private readonly RecognizerProfile _profile;
+
+    public OnnxCoinRecognizer(RecognizerProfile profile)
+    {
+        if (string.IsNullOrEmpty(profile.ModelAsset))
+            throw new ArgumentException($"Il profilo {profile.Id} non indica un file del modello.", nameof(profile));
+        _profile = profile;
+    }
+
+    public string Id => _profile.Id;
+    public string DisplayName => _profile.DisplayName;
     public bool RequiresNetwork => false;
     public bool IsConfigured => true;
 
@@ -33,7 +43,7 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
         {
             try
             {
-                var session = await GetSessionAsync(ct);
+                var session = await GetSessionAsync(_profile.ModelAsset!, ct);
                 ct.ThrowIfCancellationRequested();
                 return Recognize(session, imageBytes);
             }
@@ -47,19 +57,20 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
             }
         }, ct);
 
-    private static async Task<InferenceSession> GetSessionAsync(CancellationToken ct)
+    private static async Task<InferenceSession> GetSessionAsync(string modelAsset, CancellationToken ct)
     {
-        if (_session is not null) return _session;
-
         await LoadLock.WaitAsync(ct);
         try
         {
-            if (_session is null)
+            if (_session is null || _sessionAsset != modelAsset)
             {
-                await using var asset = await FileSystem.OpenAppPackageFileAsync(ModelAsset);
+                await using var asset = await FileSystem.OpenAppPackageFileAsync(modelAsset);
                 using var memory = new MemoryStream();
                 await asset.CopyToAsync(memory, ct);
-                _session = new InferenceSession(memory.ToArray());
+                var loaded = new InferenceSession(memory.ToArray());
+                _session?.Dispose();
+                _session = loaded;
+                _sessionAsset = modelAsset;
             }
             return _session;
         }
@@ -73,11 +84,14 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
     {
         using var source = ImageHelper.DecodeUpright(imageBytes);
 
-        var letterbox = Letterbox.For(source.Width, source.Height, InputSize);
-        var pixels = DrawLetterboxed(source, letterbox);
-        var tensor = new DenseTensor<float>(Letterbox.ToTensor(pixels), new[] { 1, 3, InputSize, InputSize });
-
         var inputName = session.InputMetadata.Keys.First();
+        var dims = session.InputMetadata[inputName].Dimensions;   // [1, 3, altezza, larghezza]
+        var inputSize = dims.Length == 4 && dims[2] > 0 ? dims[2] : DefaultInputSize;
+
+        var letterbox = Letterbox.For(source.Width, source.Height, inputSize);
+        var pixels = DrawLetterboxed(source, letterbox, inputSize);
+        var tensor = new DenseTensor<float>(Letterbox.ToTensor(pixels), new[] { 1, 3, inputSize, inputSize });
+
         using var outputs = session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
         var output = outputs.First().AsTensor<float>();
 
@@ -112,9 +126,9 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
     }
 
     /// <summary>Disegna l'immagine al centro di un quadrato grigio (114, come nell'addestramento Ultralytics).</summary>
-    private static int[] DrawLetterboxed(Bitmap source, Letterbox letterbox)
+    private static int[] DrawLetterboxed(Bitmap source, Letterbox letterbox, int inputSize)
     {
-        using var canvasBitmap = Bitmap.CreateBitmap(InputSize, InputSize, Bitmap.Config.Argb8888!)!;
+        using var canvasBitmap = Bitmap.CreateBitmap(inputSize, inputSize, Bitmap.Config.Argb8888!)!;
         using var canvas = new Canvas(canvasBitmap);
         canvas.DrawColor(Android.Graphics.Color.Rgb(114, 114, 114));
 
@@ -124,8 +138,8 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
         matrix.PostTranslate(letterbox.PadX, letterbox.PadY);
         canvas.DrawBitmap(source, matrix, paint);
 
-        var pixels = new int[InputSize * InputSize];
-        canvasBitmap.GetPixels(pixels, 0, InputSize, 0, 0, InputSize, InputSize);
+        var pixels = new int[inputSize * inputSize];
+        canvasBitmap.GetPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize);
         return pixels;
     }
 }

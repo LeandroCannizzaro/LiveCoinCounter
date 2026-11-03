@@ -36,7 +36,7 @@ public static class RecognizerFactory
             RecognizerKind.Anthropic => new AnthropicRecognizer(profile, config),
             RecognizerKind.OpenAiCompatible => new OpenAiCompatibleRecognizer(profile, config),
             RecognizerKind.Offline => new OfflineRecognizer(),
-            RecognizerKind.OnDeviceModel => new OnnxCoinRecognizer(),
+            RecognizerKind.OnDeviceModel => new OnnxCoinRecognizer(profile),
             _ => throw new NotSupportedException($"Provider non supportato: {profile.Kind}")
         };
 }

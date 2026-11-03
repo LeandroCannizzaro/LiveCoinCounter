@@ -47,6 +47,6 @@ Su Windows servono percorsi **assoluti**: con quelli relativi la CLI di Kaggle f
 
 ## Uso del modello nell'app
 
-L'app (`MobileApp/LiveCoinCounter`) include il modello come asset `Resources/Raw/coin_model.onnx`, copia di `runs/baseline1/best.onnx`,
-ed e' eseguito da `OnnxCoinRecognizer` (profilo "Offline (modello addestrato)", soglia 0,25, NMS 0,7 come nella valutazione).
-Per aggiornarlo dopo un nuovo addestramento basta sostituire quel file e ricompilare. Richiede Android 7.0 (API 24) per ONNX Runtime.
+L'app (`MobileApp/LiveCoinCounter`) include i modelli come asset ONNX in `Resources/Raw/`, eseguiti da `OnnxCoinRecognizer` (soglia 0,25, NMS indifferente alla classe come nella valutazione). Ogni modello e' un profilo in `RecognizerCatalog` (`Recognition.Core/RecognizerProfile.cs`) con il campo `ModelAsset`; la risoluzione di ingresso si legge dal file ONNX.
+Modelli attuali: `coin_model_s_640.onnx` (esperimento `s_aug`, consigliato) e `coin_model_n_960.onnx` (`n_aug_960`).
+**Per aggiungere un modello**: copiare il suo `best.onnx` in `Resources/Raw/` (formato YOLO11 detect, uscita `[1, 4+8, ancore]`, stesse 8 classi) e aggiungere un `RecognizerProfile` di tipo `OnDeviceModel` con il nome del file; niente altro codice. Richiede Android 7.0 (API 24) per ONNX Runtime.

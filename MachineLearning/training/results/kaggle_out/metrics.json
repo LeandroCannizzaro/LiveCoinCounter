@@ -1,0 +1,4553 @@
+{
+  "n_base": {
+    "name": "n_base",
+    "model": "yolo11n.pt",
+    "imgsz": 640,
+    "epochs": 100,
+    "synthetic": false,
+    "photometric": false,
+    "conf": 0.25,
+    "val_map50": 0.994,
+    "val_map50_95": 0.894,
+    "test_map50": 0.985,
+    "test_map50_95": 0.868,
+    "val": {
+      "images": 61,
+      "total_exact": 0.967,
+      "counts_exact": 0.967,
+      "mean_abs_error_cents": 0.4,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 0.97,
+          "true": 32,
+          "predicted": 33
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_roboflow": {
+      "images": 47,
+      "total_exact": 0.957,
+      "counts_exact": 0.957,
+      "mean_abs_error_cents": 0.5,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 0.964,
+          "true": 27,
+          "predicted": 28
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test": {
+      "images": 62,
+      "total_exact": 0.871,
+      "counts_exact": 0.871,
+      "mean_abs_error_cents": 9.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.981,
+          "precision": 0.964,
+          "true": 54,
+          "predicted": 55
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.976,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.949,
+          "true": 37,
+          "predicted": 39
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 0.96,
+          "true": 25,
+          "predicted": 25
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.857,
+          "true": 13,
+          "predicted": 14
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        }
+      }
+    },
+    "test_kaggle": {
+      "images": 10,
+      "total_exact": 0.7,
+      "counts_exact": 0.7,
+      "mean_abs_error_cents": 7.5,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.75,
+          "precision": 0.75,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 0.8,
+          "precision": 0.8,
+          "true": 5,
+          "predicted": 5
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.889,
+          "true": 8,
+          "predicted": 9
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 0.889,
+          "true": 8,
+          "predicted": 9
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 0.667,
+          "true": 2,
+          "predicted": 3
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_roboflow": {
+      "images": 52,
+      "total_exact": 0.904,
+      "counts_exact": 0.904,
+      "mean_abs_error_cents": 9.3,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.98,
+          "true": 50,
+          "predicted": 51
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 0.987,
+          "true": 78,
+          "predicted": 78
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.967,
+          "true": 29,
+          "predicted": 30
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 53,
+          "predicted": 53
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 0.909,
+          "true": 11,
+          "predicted": 11
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.952,
+          "true": 20,
+          "predicted": 21
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.947,
+          "true": 36,
+          "predicted": 38
+        }
+      }
+    },
+    "test_agnostic": {
+      "images": 62,
+      "total_exact": 0.887,
+      "counts_exact": 0.887,
+      "mean_abs_error_cents": 6.6,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.981,
+          "precision": 0.981,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.976,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 0.973,
+          "precision": 0.973,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 0.96,
+          "true": 25,
+          "predicted": 25
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.923,
+          "true": 13,
+          "predicted": 13
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        }
+      }
+    },
+    "val_shadow": {
+      "images": 61,
+      "total_exact": 0.967,
+      "counts_exact": 0.967,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.981,
+          "true": 52,
+          "predicted": 53
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_shadow_roboflow": {
+      "images": 47,
+      "total_exact": 0.957,
+      "counts_exact": 0.957,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.979,
+          "true": 46,
+          "predicted": 47
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test_shadow": {
+      "images": 62,
+      "total_exact": 0.855,
+      "counts_exact": 0.855,
+      "mean_abs_error_cents": 12.6,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.981,
+          "precision": 0.981,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.964,
+          "true": 83,
+          "predicted": 84
+        },
+        "5 ct": {
+          "recall": 0.973,
+          "precision": 0.947,
+          "true": 37,
+          "predicted": 38
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.966,
+          "true": 57,
+          "predicted": 59
+        },
+        "20 ct": {
+          "recall": 0.92,
+          "precision": 0.958,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.857,
+          "true": 13,
+          "predicted": 14
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.929,
+          "true": 39,
+          "predicted": 42
+        }
+      }
+    },
+    "test_shadow_kaggle": {
+      "images": 10,
+      "total_exact": 0.7,
+      "counts_exact": 0.7,
+      "mean_abs_error_cents": 8.5,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.75,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 3
+        },
+        "2 ct": {
+          "recall": 0.8,
+          "precision": 0.571,
+          "true": 5,
+          "predicted": 7
+        },
+        "5 ct": {
+          "recall": 0.875,
+          "precision": 0.875,
+          "true": 8,
+          "predicted": 8
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.8,
+          "true": 4,
+          "predicted": 5
+        },
+        "20 ct": {
+          "recall": 0.875,
+          "precision": 0.875,
+          "true": 8,
+          "predicted": 8
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 0.667,
+          "true": 2,
+          "predicted": 3
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_shadow_roboflow": {
+      "images": 52,
+      "total_exact": 0.885,
+      "counts_exact": 0.885,
+      "mean_abs_error_cents": 13.3,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.98,
+          "true": 50,
+          "predicted": 51
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.967,
+          "true": 29,
+          "predicted": 30
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.981,
+          "true": 53,
+          "predicted": 54
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 0.909,
+          "true": 11,
+          "predicted": 11
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.952,
+          "true": 20,
+          "predicted": 21
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.923,
+          "true": 36,
+          "predicted": 39
+        }
+      }
+    },
+    "test_shadow_agnostic": {
+      "images": 62,
+      "total_exact": 0.887,
+      "counts_exact": 0.887,
+      "mean_abs_error_cents": 10.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.981,
+          "precision": 0.981,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.976,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 0.946,
+          "precision": 0.972,
+          "true": 37,
+          "predicted": 36
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.983,
+          "true": 57,
+          "predicted": 58
+        },
+        "20 ct": {
+          "recall": 0.92,
+          "precision": 0.958,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.923,
+          "true": 13,
+          "predicted": 13
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.929,
+          "true": 39,
+          "predicted": 42
+        }
+      }
+    },
+    "minutes": 15.0
+  },
+  "n_photo": {
+    "name": "n_photo",
+    "model": "yolo11n.pt",
+    "imgsz": 640,
+    "epochs": 100,
+    "synthetic": false,
+    "photometric": true,
+    "conf": 0.25,
+    "val_map50": 0.993,
+    "val_map50_95": 0.899,
+    "test_map50": 0.978,
+    "test_map50_95": 0.869,
+    "val": {
+      "images": 61,
+      "total_exact": 0.967,
+      "counts_exact": 0.967,
+      "mean_abs_error_cents": 0.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.957,
+          "true": 45,
+          "predicted": 47
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_roboflow": {
+      "images": 47,
+      "total_exact": 0.957,
+      "counts_exact": 0.957,
+      "mean_abs_error_cents": 0.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test": {
+      "images": 62,
+      "total_exact": 0.871,
+      "counts_exact": 0.871,
+      "mean_abs_error_cents": 8.9,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.963,
+          "precision": 0.981,
+          "true": 54,
+          "predicted": 53
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.976,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 0.946,
+          "precision": 0.946,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.934,
+          "true": 57,
+          "predicted": 61
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 0.96,
+          "true": 25,
+          "predicted": 25
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.923,
+          "true": 13,
+          "predicted": 13
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        }
+      }
+    },
+    "test_kaggle": {
+      "images": 10,
+      "total_exact": 0.8,
+      "counts_exact": 0.8,
+      "mean_abs_error_cents": 7.9,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 0.8,
+          "precision": 0.667,
+          "true": 5,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 0.75,
+          "precision": 0.857,
+          "true": 8,
+          "predicted": 7
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 0.889,
+          "true": 8,
+          "predicted": 9
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 0.667,
+          "true": 2,
+          "predicted": 3
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_roboflow": {
+      "images": 52,
+      "total_exact": 0.885,
+      "counts_exact": 0.885,
+      "mean_abs_error_cents": 9.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.96,
+          "precision": 0.98,
+          "true": 50,
+          "predicted": 49
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.967,
+          "true": 29,
+          "predicted": 30
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.93,
+          "true": 53,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 1.0,
+          "true": 11,
+          "predicted": 10
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.952,
+          "true": 20,
+          "predicted": 21
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.947,
+          "true": 36,
+          "predicted": 38
+        }
+      }
+    },
+    "test_agnostic": {
+      "images": 62,
+      "total_exact": 0.887,
+      "counts_exact": 0.887,
+      "mean_abs_error_cents": 7.9,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.926,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 50
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.976,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 0.946,
+          "precision": 0.946,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.95,
+          "true": 57,
+          "predicted": 60
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 0.96,
+          "true": 25,
+          "predicted": 25
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        }
+      }
+    },
+    "val_shadow": {
+      "images": 61,
+      "total_exact": 0.934,
+      "counts_exact": 0.934,
+      "mean_abs_error_cents": 0.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 52,
+          "predicted": 54
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.957,
+          "true": 45,
+          "predicted": 47
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_kaggle": {
+      "images": 14,
+      "total_exact": 0.929,
+      "counts_exact": 0.929,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.857,
+          "true": 6,
+          "predicted": 7
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_shadow_roboflow": {
+      "images": 47,
+      "total_exact": 0.936,
+      "counts_exact": 0.936,
+      "mean_abs_error_cents": 0.3,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.979,
+          "true": 46,
+          "predicted": 47
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test_shadow": {
+      "images": 62,
+      "total_exact": 0.887,
+      "counts_exact": 0.887,
+      "mean_abs_error_cents": 8.5,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.963,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 52
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.976,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 0.946,
+          "precision": 0.946,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.919,
+          "true": 57,
+          "predicted": 62
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.923,
+          "true": 13,
+          "predicted": 13
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        }
+      }
+    },
+    "test_shadow_kaggle": {
+      "images": 10,
+      "total_exact": 0.8,
+      "counts_exact": 0.8,
+      "mean_abs_error_cents": 5.7,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 0.8,
+          "precision": 0.667,
+          "true": 5,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 0.75,
+          "precision": 0.857,
+          "true": 8,
+          "predicted": 7
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.8,
+          "true": 4,
+          "predicted": 5
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 0.667,
+          "true": 2,
+          "predicted": 3
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_shadow_roboflow": {
+      "images": 52,
+      "total_exact": 0.904,
+      "counts_exact": 0.904,
+      "mean_abs_error_cents": 9.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 50,
+          "predicted": 48
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.967,
+          "true": 29,
+          "predicted": 30
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.93,
+          "true": 53,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 1.0,
+          "true": 11,
+          "predicted": 10
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.952,
+          "true": 20,
+          "predicted": 21
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.947,
+          "true": 36,
+          "predicted": 38
+        }
+      }
+    },
+    "test_shadow_agnostic": {
+      "images": 62,
+      "total_exact": 0.887,
+      "counts_exact": 0.887,
+      "mean_abs_error_cents": 8.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 0.944,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 51
+        },
+        "2 ct": {
+          "recall": 0.976,
+          "precision": 0.976,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 0.946,
+          "precision": 0.946,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.966,
+          "true": 57,
+          "predicted": 59
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.923,
+          "true": 13,
+          "predicted": 13
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.951,
+          "true": 39,
+          "predicted": 41
+        }
+      }
+    },
+    "minutes": 10.6
+  },
+  "n_aug": {
+    "name": "n_aug",
+    "model": "yolo11n.pt",
+    "imgsz": 640,
+    "epochs": 100,
+    "synthetic": true,
+    "photometric": true,
+    "conf": 0.25,
+    "val_map50": 0.994,
+    "val_map50_95": 0.9,
+    "test_map50": 0.985,
+    "test_map50_95": 0.871,
+    "val": {
+      "images": 61,
+      "total_exact": 0.951,
+      "counts_exact": 0.951,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 52,
+          "predicted": 54
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_kaggle": {
+      "images": 14,
+      "total_exact": 0.857,
+      "counts_exact": 0.857,
+      "mean_abs_error_cents": 0.3,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.75,
+          "true": 6,
+          "predicted": 8
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_roboflow": {
+      "images": 47,
+      "total_exact": 0.979,
+      "counts_exact": 0.979,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test": {
+      "images": 62,
+      "total_exact": 0.903,
+      "counts_exact": 0.903,
+      "mean_abs_error_cents": 2.5,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.982,
+          "true": 54,
+          "predicted": 55
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 0.988,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.92,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 23
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.857,
+          "true": 13,
+          "predicted": 14
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        }
+      }
+    },
+    "test_kaggle": {
+      "images": 10,
+      "total_exact": 0.8,
+      "counts_exact": 0.8,
+      "mean_abs_error_cents": 3.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.833,
+          "true": 5,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 0.875,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 7
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 0.667,
+          "true": 2,
+          "predicted": 3
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_roboflow": {
+      "images": 52,
+      "total_exact": 0.923,
+      "counts_exact": 0.923,
+      "mean_abs_error_cents": 2.3,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.98,
+          "true": 50,
+          "predicted": 51
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 53,
+          "predicted": 53
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 0.909,
+          "true": 11,
+          "predicted": 11
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 20,
+          "predicted": 20
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 36,
+          "predicted": 36
+        }
+      }
+    },
+    "test_agnostic": {
+      "images": 62,
+      "total_exact": 0.919,
+      "counts_exact": 0.919,
+      "mean_abs_error_cents": 2.4,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.982,
+          "true": 54,
+          "predicted": 55
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 82
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.92,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 23
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.857,
+          "true": 13,
+          "predicted": 14
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        }
+      }
+    },
+    "val_shadow": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_shadow_roboflow": {
+      "images": 47,
+      "total_exact": 0.979,
+      "counts_exact": 0.979,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test_shadow": {
+      "images": 62,
+      "total_exact": 0.903,
+      "counts_exact": 0.903,
+      "mean_abs_error_cents": 2.8,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.982,
+          "true": 54,
+          "predicted": 55
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 0.988,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.857,
+          "true": 13,
+          "predicted": 14
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        }
+      }
+    },
+    "test_shadow_kaggle": {
+      "images": 10,
+      "total_exact": 0.8,
+      "counts_exact": 0.8,
+      "mean_abs_error_cents": 5.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 0.833,
+          "true": 5,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 0.667,
+          "true": 2,
+          "predicted": 3
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_shadow_roboflow": {
+      "images": 52,
+      "total_exact": 0.923,
+      "counts_exact": 0.923,
+      "mean_abs_error_cents": 2.3,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.98,
+          "true": 50,
+          "predicted": 51
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 53,
+          "predicted": 53
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 0.909,
+          "true": 11,
+          "predicted": 11
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 20,
+          "predicted": 20
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 36,
+          "predicted": 36
+        }
+      }
+    },
+    "test_shadow_agnostic": {
+      "images": 62,
+      "total_exact": 0.903,
+      "counts_exact": 0.903,
+      "mean_abs_error_cents": 2.5,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 0.982,
+          "true": 54,
+          "predicted": 55
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 0.988,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 0.973,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 36
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.92,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 23
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 0.857,
+          "true": 13,
+          "predicted": 14
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        }
+      }
+    },
+    "minutes": 40.6
+  },
+  "s_aug": {
+    "name": "s_aug",
+    "model": "yolo11s.pt",
+    "imgsz": 640,
+    "epochs": 100,
+    "synthetic": true,
+    "photometric": true,
+    "conf": 0.25,
+    "val_map50": 0.995,
+    "val_map50_95": 0.903,
+    "test_map50": 0.98,
+    "test_map50_95": 0.877,
+    "val": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_roboflow": {
+      "images": 47,
+      "total_exact": 0.979,
+      "counts_exact": 0.979,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test": {
+      "images": 62,
+      "total_exact": 0.935,
+      "counts_exact": 0.935,
+      "mean_abs_error_cents": 28.7,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 82
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.919,
+          "true": 57,
+          "predicted": 62
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.812,
+          "true": 39,
+          "predicted": 48
+        }
+      }
+    },
+    "test_kaggle": {
+      "images": 10,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_roboflow": {
+      "images": 52,
+      "total_exact": 0.923,
+      "counts_exact": 0.923,
+      "mean_abs_error_cents": 34.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 50,
+          "predicted": 50
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.914,
+          "true": 53,
+          "predicted": 58
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 1.0,
+          "true": 11,
+          "predicted": 10
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 20,
+          "predicted": 20
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.8,
+          "true": 36,
+          "predicted": 45
+        }
+      }
+    },
+    "test_agnostic": {
+      "images": 62,
+      "total_exact": 0.935,
+      "counts_exact": 0.935,
+      "mean_abs_error_cents": 18.4,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 82
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.983,
+          "true": 57,
+          "predicted": 58
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.867,
+          "true": 39,
+          "predicted": 45
+        }
+      }
+    },
+    "val_shadow": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_shadow_roboflow": {
+      "images": 47,
+      "total_exact": 0.979,
+      "counts_exact": 0.979,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test_shadow": {
+      "images": 62,
+      "total_exact": 0.935,
+      "counts_exact": 0.935,
+      "mean_abs_error_cents": 28.7,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 82
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.919,
+          "true": 57,
+          "predicted": 62
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.812,
+          "true": 39,
+          "predicted": 48
+        }
+      }
+    },
+    "test_shadow_kaggle": {
+      "images": 10,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_shadow_roboflow": {
+      "images": 52,
+      "total_exact": 0.923,
+      "counts_exact": 0.923,
+      "mean_abs_error_cents": 34.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 50,
+          "predicted": 50
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.914,
+          "true": 53,
+          "predicted": 58
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 1.0,
+          "true": 11,
+          "predicted": 10
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 20,
+          "predicted": 20
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.8,
+          "true": 36,
+          "predicted": 45
+        }
+      }
+    },
+    "test_shadow_agnostic": {
+      "images": 62,
+      "total_exact": 0.935,
+      "counts_exact": 0.935,
+      "mean_abs_error_cents": 15.3,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 82
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 0.966,
+          "true": 57,
+          "predicted": 59
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 26,
+          "predicted": 26
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.886,
+          "true": 39,
+          "predicted": 44
+        }
+      }
+    },
+    "minutes": 45.9
+  },
+  "n_aug_960": {
+    "name": "n_aug_960",
+    "model": "yolo11n.pt",
+    "imgsz": 960,
+    "epochs": 100,
+    "synthetic": true,
+    "photometric": true,
+    "batch": 8,
+    "conf": 0.25,
+    "val_map50": 0.993,
+    "val_map50_95": 0.899,
+    "test_map50": 0.989,
+    "test_map50_95": 0.876,
+    "val": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_roboflow": {
+      "images": 47,
+      "total_exact": 0.979,
+      "counts_exact": 0.979,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test": {
+      "images": 62,
+      "total_exact": 0.935,
+      "counts_exact": 0.935,
+      "mean_abs_error_cents": 4.4,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 82
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        }
+      }
+    },
+    "test_kaggle": {
+      "images": 10,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_roboflow": {
+      "images": 52,
+      "total_exact": 0.923,
+      "counts_exact": 0.923,
+      "mean_abs_error_cents": 5.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 50,
+          "predicted": 50
+        },
+        "2 ct": {
+          "recall": 0.987,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 77
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 53,
+          "predicted": 53
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 1.0,
+          "true": 11,
+          "predicted": 10
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.952,
+          "true": 20,
+          "predicted": 21
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.973,
+          "true": 36,
+          "predicted": 37
+        }
+      }
+    },
+    "test_agnostic": {
+      "images": 62,
+      "total_exact": 0.935,
+      "counts_exact": 0.935,
+      "mean_abs_error_cents": 4.4,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 0.988,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 82
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        }
+      }
+    },
+    "val_shadow": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_kaggle": {
+      "images": 14,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "2 euro": {
+          "recall": null,
+          "precision": null,
+          "true": 0,
+          "predicted": 0
+        }
+      }
+    },
+    "val_shadow_roboflow": {
+      "images": 47,
+      "total_exact": 0.979,
+      "counts_exact": 0.979,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 56,
+          "predicted": 56
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 46,
+          "predicted": 46
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 39,
+          "predicted": 39
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 27,
+          "predicted": 27
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "val_shadow_agnostic": {
+      "images": 61,
+      "total_exact": 0.984,
+      "counts_exact": 0.984,
+      "mean_abs_error_cents": 0.1,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 60,
+          "predicted": 60
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 52,
+          "predicted": 52
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 0.978,
+          "true": 45,
+          "predicted": 46
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 42,
+          "predicted": 42
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 32,
+          "predicted": 32
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 31,
+          "predicted": 31
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 7,
+          "predicted": 7
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 24,
+          "predicted": 24
+        }
+      }
+    },
+    "test_shadow": {
+      "images": 62,
+      "total_exact": 0.952,
+      "counts_exact": 0.952,
+      "mean_abs_error_cents": 4.4,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        }
+      }
+    },
+    "test_shadow_kaggle": {
+      "images": 10,
+      "total_exact": 1.0,
+      "counts_exact": 1.0,
+      "mean_abs_error_cents": 0.0,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 5,
+          "predicted": 5
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 4,
+          "predicted": 4
+        },
+        "20 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 8,
+          "predicted": 8
+        },
+        "50 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 2,
+          "predicted": 2
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 6,
+          "predicted": 6
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 3,
+          "predicted": 3
+        }
+      }
+    },
+    "test_shadow_roboflow": {
+      "images": 52,
+      "total_exact": 0.942,
+      "counts_exact": 0.942,
+      "mean_abs_error_cents": 5.2,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 50,
+          "predicted": 50
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 78,
+          "predicted": 78
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 29,
+          "predicted": 29
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 53,
+          "predicted": 53
+        },
+        "20 ct": {
+          "recall": 0.941,
+          "precision": 1.0,
+          "true": 17,
+          "predicted": 16
+        },
+        "50 ct": {
+          "recall": 0.909,
+          "precision": 1.0,
+          "true": 11,
+          "predicted": 10
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.952,
+          "true": 20,
+          "predicted": 21
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.973,
+          "true": 36,
+          "predicted": 37
+        }
+      }
+    },
+    "test_shadow_agnostic": {
+      "images": 62,
+      "total_exact": 0.952,
+      "counts_exact": 0.952,
+      "mean_abs_error_cents": 4.4,
+      "per_class": {
+        "1 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 54,
+          "predicted": 54
+        },
+        "2 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 83,
+          "predicted": 83
+        },
+        "5 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 37,
+          "predicted": 37
+        },
+        "10 ct": {
+          "recall": 1.0,
+          "precision": 1.0,
+          "true": 57,
+          "predicted": 57
+        },
+        "20 ct": {
+          "recall": 0.96,
+          "precision": 1.0,
+          "true": 25,
+          "predicted": 24
+        },
+        "50 ct": {
+          "recall": 0.923,
+          "precision": 1.0,
+          "true": 13,
+          "predicted": 12
+        },
+        "1 euro": {
+          "recall": 1.0,
+          "precision": 0.963,
+          "true": 26,
+          "predicted": 27
+        },
+        "2 euro": {
+          "recall": 1.0,
+          "precision": 0.975,
+          "true": 39,
+          "predicted": 40
+        }
+      }
+    },
+    "minutes": 85.9
+  }
+}

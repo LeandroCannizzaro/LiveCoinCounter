@@ -11,6 +11,7 @@ public enum RecognizerKind
 
 /// <summary>
 /// Descrive un provider selezionabile: protocollo, endpoint e modelli di default.
+/// Per i modelli sul dispositivo (<see cref="RecognizerKind.OnDeviceModel"/>) ModelAsset è il file ONNX in Resources/Raw.
 /// </summary>
 public sealed record RecognizerProfile(
     string Id,
@@ -22,7 +23,8 @@ public sealed record RecognizerProfile(
     string KeyPlaceholder,
     string? KeyUrl,
     string Note,
-    bool BaseUrlEditable = false)
+    bool BaseUrlEditable = false,
+    string? ModelAsset = null)
 {
     public bool IsOffline => Kind is RecognizerKind.Offline or RecognizerKind.OnDeviceModel;
     public override string ToString() => DisplayName;
@@ -103,10 +105,19 @@ public static class RecognizerCatalog
             "Per server propri (Ollama, LM Studio, vLLM...). Serve un indirizzo HTTPS: l'app blocca il traffico HTTP in chiaro.",
             BaseUrlEditable: true),
 
-        new RecognizerProfile("offline-model", "Offline (modello addestrato)", RecognizerKind.OnDeviceModel,
+        // Modelli addestrati sul dispositivo: per aggiungerne uno basta copiare l'ONNX in Resources/Raw e una riga qui.
+        // L'id "offline-model" è quello salvato nelle impostazioni delle versioni precedenti.
+        new RecognizerProfile("offline-model", "Offline · YOLO11s 640 (consigliato)", RecognizerKind.OnDeviceModel,
             "", Array.Empty<string>(),
             false, "", null,
-            "Modello di visione addestrato su foto di monete euro, eseguito sul telefono: senza rete e senza inviare la foto. Funziona meglio con monete ben separate su sfondo uniforme."),
+            "Modello di visione addestrato su foto di monete euro, eseguito sul telefono: senza rete e senza inviare la foto. Equilibrio tra precisione e velocità.",
+            ModelAsset: "coin_model_s_640.onnx"),
+
+        new RecognizerProfile("offline-model-n960", "Offline · YOLO11n 960 (più preciso con le ombre)", RecognizerKind.OnDeviceModel,
+            "", Array.Empty<string>(),
+            false, "", null,
+            "Modello più piccolo ma con immagini a risoluzione maggiore: un po' più preciso con ombre e monete piccole, più lento da eseguire.",
+            ModelAsset: "coin_model_n_960.onnx"),
 
         new RecognizerProfile("offline", "Offline (euristico, sperimentale)", RecognizerKind.Offline,
             "", Array.Empty<string>(),
