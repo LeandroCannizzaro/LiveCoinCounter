@@ -76,7 +76,7 @@ public abstract class AiRecognizerBase : ICoinRecognizer
     {
         try
         {
-            var base64 = Convert.ToBase64String(ImageHelper.ShrinkForUpload(imageBytes));
+            var base64 = Convert.ToBase64String(ImageShrink.Shrinker(imageBytes));
 
             HttpResponseMessage? response = null;
             string responseText = string.Empty;

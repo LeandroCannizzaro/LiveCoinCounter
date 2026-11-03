@@ -38,6 +38,13 @@
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- Progetti di supporto: la libreria condivisa è referenziata, gli strumenti non fanno parte dell'app -->
+  <ItemGroup>
+    <Compile Remove="src\**;tools\**" />
+    <None Remove="src\**;tools\**" />
+    <ProjectReference Include="src\Recognition.Core\Recognition.Core.csproj" />
+  </ItemGroup>
+
   <!-- NuGet packages -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
