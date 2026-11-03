@@ -45,4 +45,5 @@ L'addestramento vero si fa su **Kaggle** o **Google Colab** (GPU gratuita); il P
 - [x] Fase 1: struttura, contratto dei dati, convertitore JSON → YOLO
 - [x] Fase 2: dataset pubblici (Kaggle e Roboflow scaricati, controllati, importati; SuperDiodo scartato)
 - [x] Fase 3: programma di etichettatura con AI (`CoinLabeler/` (progetto .NET in questa cartella); provato solo per i box, non ancora con una chiave AI reale)
-- [ ] Fasi 4-9: foto proprie, test set, addestramento, integrazione nell'app
+- [x] Fase 6 (prima prova): baseline YOLO11n su Kaggle, test 98,3% di totale esatto su 59 foto dei dataset pubblici, **non** indicativo del caso reale (vedi `training/RESULTS.md`)
+- [ ] Fasi 4, 5, 7-9: foto proprie, test set riservato, confronto strategie, integrazione nell'app
