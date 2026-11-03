@@ -65,4 +65,13 @@
     </ItemGroup>
   </Target>
 
+  <!-- Stesso problema, nel punto in cui il build Android raccoglie le librerie .so da mettere nell'APK. -->
+  <Target Name="DropDesktopNativeLibraries" BeforeTargets="_IncludeNativeSystemLibraries">
+    <ItemGroup>
+      <_DesktopNativeLibrary Include="@(ResolvedFileToPublish)"
+        Condition="'%(ResolvedFileToPublish.Extension)' == '.so' And $([System.Text.RegularExpressions.Regex]::IsMatch('%(ResolvedFileToPublish.FullPath)', '.runtimes.(linux|win|osx)'))" />
+      <ResolvedFileToPublish Remove="@(_DesktopNativeLibrary)" />
+    </ItemGroup>
+  </Target>
+
 </Project>
