@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Net.Sockets;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using LiveCoinCounter.Models;
@@ -10,7 +12,11 @@ namespace LiveCoinCounter.Services.Recognition;
 /// </summary>
 public abstract class AiRecognizerBase : ICoinRecognizer
 {
-    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(60) };
+    /// <summary>Tentativi per modello in caso di errore di rete (ogni tentativo con una connessione nuova).</summary>
+    private const int AttemptsPerModel = 3;
+
+    /// <summary>Oltre questo tempo complessivo non si fanno altri tentativi.</summary>
+    private static readonly TimeSpan MaxRetryTime = TimeSpan.FromSeconds(90);
 
     protected const string SystemPrompt = """
         Sei un esperto nel riconoscimento di monete. Analizza l'immagine e identifica tutte le monete visibili sul tavolo.
@@ -82,29 +88,47 @@ public abstract class AiRecognizerBase : ICoinRecognizer
             string responseText = string.Empty;
             Exception? lastNetworkError = null;
 
+            var clock = Stopwatch.StartNew();
+
             foreach (var model in Config.ModelChain(Profile))
             {
-                try
+                var gotResponse = false;
+
+                for (var attempt = 1; attempt <= AttemptsPerModel && !gotResponse; attempt++)
                 {
-                    using var request = BuildRequest(model, base64);
-                    response = await Client.SendAsync(request, ct);
-                    responseText = await response.Content.ReadAsStringAsync(ct);
-                }
-                catch (Exception ex) when (ex is HttpRequestException or IOException)
-                {
-                    // Connessione chiusa dal server (spesso per sovraccarico): prova il modello successivo
-                    lastNetworkError = ex;
-                    continue;
+                    try
+                    {
+                        using var client = NetworkClient.Create();
+                        using var request = BuildRequest(model, base64);
+                        request.Headers.ConnectionClose = true;
+                        response = await client.SendAsync(request, ct);
+                        responseText = await response.Content.ReadAsStringAsync(ct);
+                        gotResponse = true;
+                        lastNetworkError = null;
+                    }
+                    catch (Exception ex) when (IsTransient(ex, ct))
+                    {
+                        // Rete cambiata o connessione caduta: si riprova con una connessione nuova
+                        lastNetworkError = ex;
+                        if (clock.Elapsed > MaxRetryTime) break;
+                        if (attempt < AttemptsPerModel)
+                            await Task.Delay(TimeSpan.FromMilliseconds(400 * attempt), ct);
+                    }
                 }
 
-                lastNetworkError = null;
-                var code = (int)response.StatusCode;
+                if (!gotResponse)
+                {
+                    if (clock.Elapsed > MaxRetryTime) break;
+                    continue; // con questo modello la rete non risponde: prova il successivo
+                }
+
+                var code = (int)response!.StatusCode;
                 if (response.IsSuccessStatusCode || (code != 503 && code != 429 && code != 404))
                     break;
             }
 
             if (lastNetworkError is not null)
-                return Fail($"Errore di rete: {lastNetworkError.Message}");
+                return Fail($"Connessione instabile, riprova tra poco ({lastNetworkError.Message})");
 
             if (response is null)
                 return Fail("Nessun modello configurato.");
@@ -127,6 +151,11 @@ public abstract class AiRecognizerBase : ICoinRecognizer
             return Fail($"Errore: {ex.Message}");
         }
     }
+
+    /// <summary>Errori di trasporto che vale la pena ritentare: socket chiuso, rete cambiata, timeout.</summary>
+    private static bool IsTransient(Exception ex, CancellationToken ct) =>
+        ex is HttpRequestException or IOException or SocketException
+        || (ex is TaskCanceledException && !ct.IsCancellationRequested);
 
     private CoinRecognitionResult ParseResponse(string responseText)
     {
