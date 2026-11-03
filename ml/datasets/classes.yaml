@@ -1,0 +1,32 @@
+# Classi unificate. L'indice è quello usato nei file YOLO; il valore è in centesimi.
+classes:
+  0: { cents: 1,   name: "1 cent" }
+  1: { cents: 2,   name: "2 cent" }
+  2: { cents: 5,   name: "5 cent" }
+  3: { cents: 10,  name: "10 cent" }
+  4: { cents: 20,  name: "20 cent" }
+  5: { cents: 50,  name: "50 cent" }
+  6: { cents: 100, name: "1 euro" }
+  7: { cents: 200, name: "2 euro" }
+
+# Come si chiamano le classi nei dataset pubblici, per mapparle sulle classi sopra.
+# (da controllare sui dati veri nella Fase 2)
+sources:
+  kaggle-janstaffa:        # indici YOLO già nell'ordine 1ct ... 2€
+    0: 1
+    1: 2
+    2: 5
+    3: 10
+    4: 20
+    5: 50
+    6: 100
+    7: 200
+  roboflow-euro-currency:  # nomi classe = valore in centesimi (ordine alfabetico in Roboflow: verificare)
+    "1": 1
+    "2": 2
+    "5": 5
+    "10": 10
+    "20": 20
+    "50": 50
+    "100": 100
+    "200": 200
