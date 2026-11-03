@@ -21,7 +21,7 @@ Piano completo: issue [LiveCoinCounter#2](https://github.com/LeandroCannizzaro/L
 
 Ogni immagine ha accanto un file `.json` con lo stesso nome (es. `IMG_0001.jpg` + `IMG_0001.json`), conforme a `schema/coin_label.schema.json`. L'etichetta di ogni moneta è il suo **valore in centesimi**: `1, 2, 5, 10, 20, 50, 100, 200`.
 
-Il formato è prodotto dal programma di etichettatura con AI (progetto C# nel repository dell'app, Fase 3 dell'issue) e convertito per l'addestramento:
+Il formato è prodotto da `tools/CoinLabeler` nel repository dell'app (Fase 3 dell'issue) e convertito per l'addestramento (con `--status auto` si prendono solo le immagini su cui i provider concordano):
 
 ```bash
 python -m coin_ml.to_yolo cartella_con_immagini_e_json cartella_di_output
@@ -42,5 +42,5 @@ L'addestramento vero si fa su **Kaggle** o **Google Colab** (GPU gratuita); il P
 
 - [x] Fase 1: struttura, contratto dei dati, convertitore JSON → YOLO
 - [ ] Fase 2: dataset pubblici (download, licenze, deduplica)
-- [ ] Fase 3: programma di etichettatura con AI
+- [x] Fase 3: programma di etichettatura con AI (`tools/CoinLabeler` nel repository dell'app; provato solo per i box, non ancora con una chiave AI reale)
 - [ ] Fasi 4-9: foto proprie, test set, addestramento, integrazione nell'app

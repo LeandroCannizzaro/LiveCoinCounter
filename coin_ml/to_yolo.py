@@ -1,7 +1,9 @@
 """Converte coppie immagine + JSON (schema/coin_label.schema.json) in etichette YOLO.
 
-Uso: python -m coin_ml.to_yolo <cartella_input> <cartella_output>
+Uso: python -m coin_ml.to_yolo <cartella_input> <cartella_output> [--status auto,review]
 Per ogni <nome>.json crea <output>/labels/<nome>.txt e copia l'immagine in <output>/images/.
+Le monete senza etichetta (label null) vengono saltate; con --status si convertono solo le immagini con quello stato
+(es. "auto" per i soli risultati su cui i provider concordano).
 """
 import json
 import shutil
@@ -18,6 +20,8 @@ def label_to_yolo_lines(label: dict) -> list[str]:
     lines = []
     for coin in label["coins"]:
         cents = coin["label"]
+        if cents is None:
+            continue
         if cents not in CENTS_TO_CLASS:
             raise ValueError(f"Valore non valido: {cents}")
         x, y, w, h = coin["bbox"]
@@ -29,13 +33,15 @@ def label_to_yolo_lines(label: dict) -> list[str]:
     return lines
 
 
-def convert_folder(src: Path, dst: Path) -> int:
+def convert_folder(src: Path, dst: Path, statuses: set[str] | None = None) -> int:
     (dst / "images").mkdir(parents=True, exist_ok=True)
     (dst / "labels").mkdir(parents=True, exist_ok=True)
 
     count = 0
     for json_path in sorted(src.glob("*.json")):
         label = json.loads(json_path.read_text(encoding="utf-8"))
+        if statuses is not None and label.get("status") not in statuses:
+            continue
         image_path = src / label["image"]
         if not image_path.exists():
             print(f"Immagine mancante, salto: {label['image']}", file=sys.stderr)
@@ -49,7 +55,13 @@ def convert_folder(src: Path, dst: Path) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    args = sys.argv[1:]
+    statuses = None
+    if "--status" in args:
+        i = args.index("--status")
+        statuses = set(args[i + 1].split(","))
+        del args[i:i + 2]
+    if len(args) != 2:
         sys.exit(__doc__)
-    n = convert_folder(Path(sys.argv[1]), Path(sys.argv[2]))
+    n = convert_folder(Path(args[0]), Path(args[1]), statuses)
     print(f"Convertite {n} immagini")

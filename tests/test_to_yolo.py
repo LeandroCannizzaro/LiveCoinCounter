@@ -26,6 +26,15 @@ class ToYoloTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             label_to_yolo_lines(label)
 
+    def test_skips_coins_without_label(self):
+        label = {"width": 100, "height": 100, "coins": [
+            {"label": None, "bbox": [0, 0, 10, 10]},
+            {"label": 50, "bbox": [0, 0, 10, 10]},
+        ]}
+        lines = label_to_yolo_lines(label)
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("5 "))
+
     def test_clamps_boxes_that_exceed_the_image(self):
         label = {"width": 100, "height": 100, "coins": [{"label": 1, "bbox": [90, 90, 40, 40]}]}
         values = [float(v) for v in label_to_yolo_lines(label)[0].split()[1:]]

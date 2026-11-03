@@ -2,40 +2,117 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Etichette di un'immagine di monete euro",
   "type": "object",
-  "required": ["image", "width", "height", "coins"],
+  "required": [
+    "image",
+    "width",
+    "height",
+    "coins"
+  ],
   "properties": {
-    "image": { "type": "string", "description": "Nome del file immagine" },
-    "width": { "type": "integer", "minimum": 1 },
-    "height": { "type": "integer", "minimum": 1 },
-    "source": { "type": "string", "description": "Origine: own-phone, kaggle-janstaffa, ..." },
+    "image": {
+      "type": "string",
+      "description": "Nome del file immagine"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source": {
+      "type": "string",
+      "description": "Origine: own-phone, kaggle-janstaffa, ..."
+    },
     "labeler": {
       "type": "object",
       "properties": {
-        "boxes": { "type": "string" },
-        "classifiers": { "type": "array", "items": { "type": "string" } },
-        "reviewed": { "type": "boolean" }
+        "boxes": {
+          "type": "string"
+        },
+        "classifiers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewed": {
+          "type": "boolean"
+        }
       }
     },
     "coins": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["label", "bbox"],
+        "required": [
+          "label",
+          "bbox"
+        ],
         "properties": {
-          "label": { "enum": [1, 2, 5, 10, 20, 50, 100, 200], "description": "Valore in centesimi" },
+          "label": {
+            "enum": [
+              1,
+              2,
+              5,
+              10,
+              20,
+              50,
+              100,
+              200,
+              null
+            ],
+            "description": "Valore in centesimi; null se non classificata"
+          },
           "bbox": {
             "type": "array",
-            "items": { "type": "number" },
+            "items": {
+              "type": "number"
+            },
             "minItems": 4,
             "maxItems": 4,
             "description": "[x, y, larghezza, altezza] in pixel, origine in alto a sinistra"
           },
-          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-          "agreement": { "type": "boolean" },
-          "side": { "enum": ["common", "national", "unknown"] }
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "agreement": {
+            "type": "boolean"
+          },
+          "side": {
+            "enum": [
+              "common",
+              "national",
+              "unknown"
+            ]
+          },
+          "votes": {
+            "type": "object",
+            "description": "Voto di ogni provider per questa moneta (null = risposta non utilizzabile)",
+            "additionalProperties": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
         }
       }
     },
-    "total_cents": { "type": "integer", "minimum": 0 }
+    "total_cents": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "enum": [
+        "auto",
+        "review",
+        "boxes-only"
+      ],
+      "description": "auto: i metodi concordano; review: da controllare; boxes-only: nessuna AI usata"
+    }
   }
 }
