@@ -29,4 +29,14 @@ public static class ImageHelper
             return original;
         }
     }
+
+    /// <summary>Piccola immagine bianca usata per verificare la connessione a un provider.</summary>
+    public static byte[] CreateTestImage()
+    {
+        using var bitmap = Bitmap.CreateBitmap(64, 64, Bitmap.Config.Argb8888!)!;
+        bitmap.EraseColor(Android.Graphics.Color.White);
+        using var output = new MemoryStream();
+        bitmap.Compress(Bitmap.CompressFormat.Jpeg!, 80, output);
+        return output.ToArray();
+    }
 }

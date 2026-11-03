@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using LiveCoinCounter.Models;
 using LiveCoinCounter.Services;
+using LiveCoinCounter.Services.Recognition;
 
 namespace LiveCoinCounter.ViewModels;
 
@@ -161,25 +162,26 @@ public class MainViewModel : INotifyPropertyChanged
     {
         if (_capturedImageBytes is null) return;
 
-        if (!SettingsService.HasApiKey)
+        var recognizer = await RecognizerFactory.CreateActiveAsync();
+
+        if (!recognizer.IsConfigured)
         {
-            await ShowAlert("API Key mancante",
-                "Vai nelle Impostazioni e inserisci la tua chiave API Gemini.\n\n" +
-                "Puoi ottenerla gratuitamente su aistudio.google.com");
+            await ShowAlert("Configurazione mancante",
+                $"Per usare «{recognizer.DisplayName}» inserisci la chiave API nelle Impostazioni, " +
+                "oppure scegli un altro metodo di riconoscimento (anche offline).");
             await OpenSettingsAsync();
             return;
         }
 
         IsAnalyzing = true;
         HasResult = false;
-        StatusMessage = "🔍 Analisi in corso...";
+        StatusMessage = $"🔍 Analisi in corso ({recognizer.DisplayName})...";
 
         RefreshCommandStates();
 
         try
         {
-            var service = new GeminiService(SettingsService.GeminiApiKey);
-            var result = await service.RecognizeCoinsAsync(_capturedImageBytes);
+            var result = await recognizer.RecognizeAsync(_capturedImageBytes);
             _lastResult = result;
 
             if (result.Success)
