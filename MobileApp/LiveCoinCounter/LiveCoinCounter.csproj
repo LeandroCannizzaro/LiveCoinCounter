@@ -38,11 +38,9 @@
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <!-- Progetti di supporto: la libreria condivisa è referenziata, gli strumenti non fanno parte dell'app -->
+  <!-- Libreria condivisa con l'etichettatore (provider AI, modelli) -->
   <ItemGroup>
-    <Compile Remove="src\**;tools\**;ml\**" />
-    <None Remove="src\**;tools\**;ml\**" />
-    <ProjectReference Include="src\Recognition.Core\Recognition.Core.csproj" />
+    <ProjectReference Include="..\Recognition.Core\Recognition.Core.csproj" />
   </ItemGroup>
 
   <!-- NuGet packages -->

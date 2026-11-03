@@ -93,7 +93,9 @@ public class SettingsViewModel : INotifyPropertyChanged
     public bool HasKeyUrl => SelectedProfile.KeyUrl is not null;
     public bool CanTest => !IsBusy;
 
-    public string ProviderNote => SelectedProfile.Note;
+    public string ProviderNote => SelectedProfile.RequiresApiKey
+        ? $"{SelectedProfile.Note} Se lasci la chiave vuota, l'app usa la chiave Gemini predefinita."
+        : SelectedProfile.Note;
     public string ApiKeyPlaceholder => SelectedProfile.KeyPlaceholder;
 
     public string ModelSummary => SelectedProfile.IsOffline
@@ -170,16 +172,11 @@ public class SettingsViewModel : INotifyPropertyChanged
         SetStatus("⏳ Test in corso...", isError: false);
         try
         {
-            var recognizer = RecognizerFactory.Create(SelectedProfile, CurrentConfig());
-            if (!recognizer.IsConfigured)
-            {
-                SetStatus("❌ Inserisci prima la chiave API.", isError: true);
-                return;
-            }
+            var recognizer = await RecognizerFactory.CreateWithFallbackAsync(SelectedProfile, CurrentConfig());
 
             var result = await recognizer.RecognizeAsync(ImageHelper.CreateTestImage());
             if (result.Success)
-                SetStatus("✅ Connessione riuscita", isError: false);
+                SetStatus($"✅ Connessione riuscita ({recognizer.DisplayName})", isError: false);
             else
                 SetStatus($"❌ {result.ErrorMessage}", isError: true);
         }

@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="LiveCoinCounter/LiveCoinCounter.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+  <Project Path="Recognition.Core/Recognition.Core.csproj" />
+</Solution>

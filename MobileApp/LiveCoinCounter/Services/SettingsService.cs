@@ -12,6 +12,9 @@ public static class SettingsService
     private const string CurrencyPreference = "currency_type";
     private const string ActiveRecognizerPreference = "active_recognizer";
 
+    /// <summary>Chiave Gemini usata quando nessun metodo AI ha una chiave configurata.</summary>
+    public const string FallbackGeminiApiKey = "AQ.Ab8RN6LGcR2sNSevUBwehTyHWyU7FBeA8u9ZFr_0SwxzUA00_g";
+
     public static string CurrencyType
     {
         get => Preferences.Default.Get(CurrencyPreference, "EUR");

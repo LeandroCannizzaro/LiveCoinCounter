@@ -1,6 +1,6 @@
 # CoinLabeler
 
-Programma di servizio (.NET 10, console) che etichetta foto di monete euro con l'AI e prepara **coppie immagine + JSON** per l'addestramento del modello offline (vedi issue #2). Il formato JSON è descritto in `ml/schema/coin_label.schema.json`.
+Programma di servizio (.NET 10, console) che etichetta foto di monete euro con l'AI e prepara **coppie immagine + JSON** per l'addestramento del modello offline (vedi issue #2). Il formato JSON è descritto in `MachineLearning/schema/coin_label.schema.json`.
 
 ## Come funziona
 
@@ -15,7 +15,7 @@ Le risposte dell'AI sono salvate in `<output>/.cache`: se il comando si interrom
 ## Uso
 
 ```bash
-cd tools/CoinLabeler
+cd MachineLearning/CoinLabeler
 
 # Solo box, nessuna chiamata a pagamento
 dotnet run -- label C:\foto C:\out --no-ai
@@ -48,6 +48,6 @@ Sul dataset Kaggle `janstaffa` (150 foto, 336 monete, `--hough 45`): **richiamo 
 ## Test
 
 ```bash
-dotnet test tools/CoinLabeler.Tests
+dotnet test MachineLearning/CoinLabeler.Tests
 ```
 Coprono la logica del consenso e il calcolo dell'IoU. L'integrazione con le API AI non è coperta da test automatici.

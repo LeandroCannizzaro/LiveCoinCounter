@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Recognition.Core\Recognition.Core.csproj" />
+    <ProjectReference Include="..\..\MobileApp\Recognition.Core\Recognition.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
