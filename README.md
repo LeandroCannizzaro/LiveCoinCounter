@@ -1,8 +1,8 @@
 # LiveCoinCounter
 
-App Android che conta le monete euro in una foto e ne calcola il totale. Si scatta (o si sceglie) una foto, si tocca **Analizza** e l'app mostra quante monete di ogni taglio ci sono e quanto valgono in tutto.
+App Android che conta le monete euro in una foto e ne calcola il totale. Sul telefono si chiama **Conteggio Monete** (il progetto e il repository si chiamano LiveCoinCounter). Si scatta (o si sceglie) una foto, si tocca **Analizza** e l'app mostra quante monete di ogni taglio ci sono e quanto valgono in tutto.
 
-Il riconoscimento può funzionare in tre modi, selezionabili nelle impostazioni:
+Il riconoscimento può funzionare in tre modi, selezionabili nelle impostazioni. Il metodo predefinito è **Offline · YOLO11s 640**:
 
 - **Offline, con un modello addestrato** (YOLO11 in formato ONNX): gira sul telefono, senza rete e senza inviare la foto a nessuno. È il metodo su cui si sta lavorando di più.
 - **AI in rete**: la foto è inviata a un provider (Google Gemini, Anthropic Claude, OpenAI, xAI Grok, DeepSeek, Mistral, OpenRouter o un endpoint OpenAI-compatibile personalizzato).
@@ -40,7 +40,7 @@ Il riconoscimento può funzionare in tre modi, selezionabili nelle impostazioni:
 
 Requisiti: telefono Android **7.0 (API 24) o successivo**.
 
-1. Apri la pagina [Releases](../../releases) del repository e scarica `LiveCoinCounter-<versione>.apk` sul telefono.
+1. Apri la pagina [Releases](../../releases) del repository e scarica `LiveCoinCounter-<versione>.apk` sul telefono (l'app installata si chiama «Conteggio Monete»).
 2. Aprilo e, quando Android lo chiede, consenti l'installazione da questa origine («Installa app sconosciute»).
 3. Alla prima analisi concedi il permesso della fotocamera, se vuoi scattare dal vivo.
 

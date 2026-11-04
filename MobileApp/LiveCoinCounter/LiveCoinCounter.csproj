@@ -10,7 +10,7 @@
     <Nullable>enable</Nullable>
 
     <!-- Versione app -->
-    <ApplicationTitle>LiveCoinCounter</ApplicationTitle>
+    <ApplicationTitle>Conteggio Monete</ApplicationTitle>
     <ApplicationId>com.LiveCoinCounter.app</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>

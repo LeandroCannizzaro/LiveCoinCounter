@@ -52,7 +52,7 @@ public sealed record RecognizerConfig(string ApiKey, string Model, string BaseUr
 /// </summary>
 public static class RecognizerCatalog
 {
-    public const string DefaultId = "gemini";
+    public const string DefaultId = "offline-model";
 
     public static readonly IReadOnlyList<RecognizerProfile> All = new[]
     {
@@ -126,5 +126,5 @@ public static class RecognizerCatalog
     };
 
     public static RecognizerProfile Get(string id) =>
-        All.FirstOrDefault(p => p.Id == id) ?? All[0];
+        All.FirstOrDefault(p => p.Id == id) ?? All.First(p => p.Id == DefaultId);
 }

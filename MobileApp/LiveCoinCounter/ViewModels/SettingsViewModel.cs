@@ -106,7 +106,7 @@ public class SettingsViewModel : INotifyPropertyChanged
         ? "La foto resta sul dispositivo: nessun dato viene inviato in rete."
         : $"Le immagini vengono inviate a {SelectedProfile.DisplayName} per l'analisi e non vengono memorizzate localmente.";
 
-    public string FooterText => $"LiveCoinCounter v1.0 · {SelectedProfile.DisplayName}";
+    public string FooterText => $"Conteggio Monete v{AppInfo.VersionString} · {SelectedProfile.DisplayName}";
 
     public bool CollectPhotos
     {
