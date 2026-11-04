@@ -122,6 +122,11 @@ jobs:
           ls -la out
           APK=$(ls out/*-Signed.apk 2>/dev/null | head -n1)
           [ -n "$APK" ] || APK=$(ls out/*.apk | head -n1)
+          # Le librerie ONNX Runtime per Linux non devono finire nell'APK (si carica solo quella Android): vedi il csproj
+          if unzip -l "$APK" | grep -q "libonnxruntime_providers_shared.so"; then
+            echo "::error::L'APK contiene librerie ONNX Runtime per Linux: sul telefono l'app andrebbe in errore."
+            exit 1
+          fi
           mkdir -p dist
           cp "$APK" "dist/LiveCoinCounter-$VERSION_NAME.apk"
           ls -la dist
