@@ -17,6 +17,10 @@
 
     <!-- Android specifico -->
     <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <!-- Solo 64 bit: le librerie native di OpenCV per tutte le architetture pesano oltre 100 MB.
+         Release (APK distribuito): solo arm64, i telefoni. Debug: anche x64, per l'emulatore. -->
+    <RuntimeIdentifiers Condition="'$(Configuration)' == 'Release'">android-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers Condition="'$(Configuration)' != 'Release'">android-arm64;android-x64</RuntimeIdentifiers>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
@@ -48,6 +52,27 @@
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <!-- Fotocamera: fotogrammi continui per il riconoscimento continuo (metodo OpenCV) -->
+    <PackageReference Include="Xamarin.AndroidX.Camera.Camera2" Version="1.6.2" />
+    <PackageReference Include="Xamarin.AndroidX.Camera.Lifecycle" Version="1.6.2" />
+    <!-- CameraX porta AndroidX.Core 1.19: core-ktx deve avere la stessa versione, altrimenti le classi Kotlin risultano doppie -->
+    <PackageReference Include="Xamarin.AndroidX.Core.Core.Ktx" Version="1.19.0.1" />
+  </ItemGroup>
+
+  <!--
+    Librerie Java da Maven per comporre il mosaico:
+    - OpenCV (licenza Apache 2): ORB per i punti caratteristici. Non si genera il binding di tutta l'API Java: la usa solo
+      la piccola classe Java OrbHelper (Platforms/Android/Java), di cui si genera il binding.
+    - ARCore (termini aggiuntivi Google ARCore): posa della fotocamera e piano del tavolo, per i metodi ARCore e Ibrido.
+  -->
+  <ItemGroup>
+    <AndroidMavenLibrary Include="org.opencv:opencv" Version="4.12.0" Bind="false" />
+    <!-- dipendenze già presenti nell'app tramite MAUI (Kotlin e AndroidX), solo non dichiarate come pacchetti diretti -->
+    <AndroidIgnoredJavaDependency Include="org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.5.20" />
+    <AndroidIgnoredJavaDependency Include="androidx.annotation:annotation:1.3.0" />
+    <AndroidMavenLibrary Include="com.google.ar:core" Version="1.57.0" Repository="Google" />
+    <TransformFile Include="Platforms\Android\Transforms\ArCoreMetadata.xml" />
+    <AndroidJavaSource Include="Platforms\Android\Java\**\*.java" Bind="true" />
   </ItemGroup>
 
   <!--

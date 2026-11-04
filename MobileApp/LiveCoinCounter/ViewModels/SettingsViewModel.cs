@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using LiveCoinCounter.Services;
 using LiveCoinCounter.Services.Recognition;
+using LiveCoinCounter.Sessions;
 
 namespace LiveCoinCounter.ViewModels;
 
@@ -125,6 +126,74 @@ public class SettingsViewModel : INotifyPropertyChanged
         ? $"Raccolta attiva: {CollectedCount} foto salvate."
         : $"Raccolta spenta ({CollectedCount} foto salvate in precedenza).";
 
+    // ---- Riconoscimento continuo ----
+
+    public IReadOnlyList<SettingOption<CaptureMethod>> CaptureMethods { get; } = new[]
+    {
+        new SettingOption<CaptureMethod>(CaptureMethod.OpenCv, "OpenCV (tutti i telefoni)",
+            "Allinea i fotogrammi con i punti caratteristici dell'immagine. Funziona ovunque; su tavoli molto uniformi (bianchi, vetro) può perdere la posizione."),
+        new SettingOption<CaptureMethod>(CaptureMethod.ArCore, "ARCore",
+            "Usa la posizione del telefono calcolata da ARCore e il piano del tavolo: regge i movimenti veloci e misura le monete in millimetri. Solo telefoni compatibili ARCore."),
+        new SettingOption<CaptureMethod>(CaptureMethod.Hybrid, "Ibrido (ARCore + OpenCV)",
+            "ARCore per la posizione, OpenCV per allineare al pixel i fotogrammi vicini. Solo telefoni compatibili ARCore.")
+    };
+
+    public SettingOption<CaptureMethod> SelectedCaptureMethod
+    {
+        get => CaptureMethods.First(o => o.Value == SettingsService.CaptureMethod);
+        set
+        {
+            if (value is null) return;
+            SettingsService.CaptureMethod = value.Value;
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<SettingOption<RetentionMode>> RetentionModes { get; } = new[]
+    {
+        new SettingOption<RetentionMode>(RetentionMode.MosaicAndCrops, "Mosaico e ritagli",
+            "Per ogni sessione restano il mosaico ridotto e un ritaglio per moneta: qualche MB."),
+        new SettingOption<RetentionMode>(RetentionMode.WithKeyframes, "Anche i fotogrammi chiave",
+            "Si conservano anche le foto originali del mosaico (decine di MB per sessione), per rianalizzarle con modelli futuri."),
+        new SettingOption<RetentionMode>(RetentionMode.DebugFrames, "Fotogrammi in debug",
+            "Come il predefinito, ma registra anche i fotogrammi della fotocamera (3 al secondo) con la posa: per lo sviluppo.")
+    };
+
+    public SettingOption<RetentionMode> SelectedRetention
+    {
+        get => RetentionModes.First(o => o.Value == SettingsService.Retention);
+        set
+        {
+            if (value is null) return;
+            SettingsService.Retention = value.Value;
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<SettingOption<AiMode>> AiModes { get; } = new[]
+    {
+        new SettingOption<AiMode>(AiMode.OfflineAiOnRequest, "Sul telefono, AI su richiesta",
+            "Il valore si riconosce sul telefono; per le monete incerte puoi chiedere l'AI in rete dal riepilogo."),
+        new SettingOption<AiMode>(AiMode.OfflineOnly, "Solo sul telefono",
+            "Nessuna immagine esce dal telefono."),
+        new SettingOption<AiMode>(AiMode.AiAutoUncertain, "AI automatica sulle incerte",
+            "Se c'è rete, i ritagli delle monete incerte vanno subito all'AI configurata sopra.")
+    };
+
+    public SettingOption<AiMode> SelectedAiMode
+    {
+        get => AiModes.First(o => o.Value == SettingsService.AiMode);
+        set
+        {
+            if (value is null) return;
+            SettingsService.AiMode = value.Value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string AiPrivacyNote =>
+        "L'AI riceve solo i ritagli delle singole monete, per riconoscerne il valore: mai i fotogrammi né il mosaico del tavolo.";
+
     public ICommand ExportPhotosCommand { get; }
     public ICommand SaveCommand { get; }
     public ICommand TestCommand { get; }
@@ -236,4 +305,10 @@ public class SettingsViewModel : INotifyPropertyChanged
     }
 
     #endregion
+}
+
+/// <summary>Una voce di un'impostazione a scelta: valore, nome nel menu e spiegazione.</summary>
+public sealed record SettingOption<T>(T Value, string Label, string Description)
+{
+    public override string ToString() => Label;
 }

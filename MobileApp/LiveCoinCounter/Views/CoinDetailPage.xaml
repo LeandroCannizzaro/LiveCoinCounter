@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LiveCoinCounter.ViewModels"
+             x:Class="LiveCoinCounter.Views.CoinDetailPage"
+             x:DataType="vm:CoinDetailViewModel"
+             Title="Moneta"
+             BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="14">
+            <Border StrokeThickness="0" StrokeShape="RoundRectangle 16" BackgroundColor="#202024" HorizontalOptions="Center"
+                    WidthRequest="256" HeightRequest="256">
+                <Image Source="{Binding Item.Crop}" Aspect="AspectFit" />
+            </Border>
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{Binding Item.ValueText}" FontSize="24" FontAttributes="Bold" HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                <Label Text="{Binding Item.ConfidenceText}" FontSize="14" HorizontalTextAlignment="Center" TextColor="{Binding Item.ConfidenceColor}" />
+                <Label Text="{Binding Item.SecondText}" IsVisible="{Binding Item.HasSecond}" FontSize="13" HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                <Label Text="{Binding Item.Note}" IsVisible="{Binding Item.HasNote}" FontSize="13" HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+            </VerticalStackLayout>
+
+            <Border Padding="16" StrokeThickness="0" StrokeShape="RoundRectangle 12"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="CORREGGI IL VALORE" FontSize="11" FontAttributes="Bold" CharacterSpacing="1"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                    <Picker Title="Valore della moneta" ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Button Text="💾 Salva correzione" Command="{Binding SaveCommand}" CornerRadius="10" />
+                    <Button Text="Annulla la correzione" Command="{Binding UndoCommand}" IsVisible="{Binding IsCorrected}"
+                            BackgroundColor="Transparent" TextColor="{StaticResource Secondary}" FontSize="13" />
+                </VerticalStackLayout>
+            </Border>
+
+            <VerticalStackLayout Spacing="6">
+                <Label Text="RICONOSCIMENTI" FontSize="11" FontAttributes="Bold" CharacterSpacing="1"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                <Label Text="{Binding History}" FontSize="13" LineBreakMode="WordWrap"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

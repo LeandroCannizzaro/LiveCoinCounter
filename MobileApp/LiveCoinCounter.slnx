@@ -3,4 +3,5 @@
     <Deploy Solution="Debug|*" />
   </Project>
   <Project Path="Recognition.Core/Recognition.Core.csproj" />
+  <Project Path="Recognition.Core.Tests/Recognition.Core.Tests.csproj" />
 </Solution>

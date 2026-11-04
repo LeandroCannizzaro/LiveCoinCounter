@@ -8,10 +8,16 @@
 
     <TabBar>
         <ShellContent
-            Title="Monete"
-            ContentTemplate="{DataTemplate views:MainPage}"
+            Title="Conta"
+            ContentTemplate="{DataTemplate views:CapturePage}"
             Icon="coin_icon.png"
-            Route="MainPage" />
+            Route="CapturePage" />
+
+        <ShellContent
+            Title="Sessioni"
+            ContentTemplate="{DataTemplate views:SessionsPage}"
+            Icon="sessions_icon.png"
+            Route="SessionsPage" />
 
         <ShellContent
             Title="Impostazioni"

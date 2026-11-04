@@ -34,15 +34,17 @@ jobs:
         run: python -m unittest discover tests
 
   dotnet-tests:
-    name: Test .NET (riconoscimento ed etichettatore)
+    name: Test .NET (riconoscimento, sessioni ed etichettatore)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Test
+      - name: Test etichettatore
         run: dotnet test MachineLearning/CoinLabeler.Tests/CoinLabeler.Tests.csproj -c Release
+      - name: Test riconoscimento continuo (mosaico, sessioni, database)
+        run: dotnet test MobileApp/Recognition.Core.Tests/Recognition.Core.Tests.csproj -c Release
 
   android:
     name: APK Android firmato
@@ -125,6 +127,11 @@ jobs:
           # Le librerie ONNX Runtime per Linux non devono finire nell'APK (si carica solo quella Android): vedi il csproj
           if unzip -l "$APK" | grep -q "libonnxruntime_providers_shared.so"; then
             echo "::error::L'APK contiene librerie ONNX Runtime per Linux: sul telefono l'app andrebbe in errore."
+            exit 1
+          fi
+          # OpenCV serve al riconoscimento continuo: la libreria Android arm64 deve esserci
+          if ! unzip -l "$APK" | grep -q "lib/arm64-v8a/libopencv_java4.so"; then
+            echo "::error::L'APK non contiene OpenCV per arm64 (libopencv_java4.so)."
             exit 1
           fi
           mkdir -p dist

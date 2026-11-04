@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LiveCoinCounter.ViewModels"
+             x:Class="LiveCoinCounter.Views.SessionsPage"
+             x:DataType="vm:SessionsViewModel"
+             x:Name="Root"
+             Title="Sessioni"
+             BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+
+    <Grid>
+        <CollectionView ItemsSource="{Binding Sessions}" SelectionMode="None" Margin="12,8">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:SessionItem">
+                    <Border Margin="0,0,0,10" Padding="10" StrokeThickness="0" StrokeShape="RoundRectangle 14"
+                            BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding BindingContext.OpenCommand, Source={x:Reference Root}, x:DataType=ContentPage}" CommandParameter="{Binding .}" />
+                        </Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="72,*,Auto" ColumnSpacing="12">
+                            <Border StrokeThickness="0" StrokeShape="RoundRectangle 10" HeightRequest="72" WidthRequest="72" BackgroundColor="#202024">
+                                <Grid>
+                                    <Image Source="{Binding Thumbnail}" Aspect="AspectFill" IsVisible="{Binding HasThumbnail}" />
+                                    <Label Text="🪙" FontSize="30" HorizontalOptions="Center" VerticalOptions="Center"
+                                           IsVisible="{Binding HasThumbnail, Converter={StaticResource InvertBoolConverter}}" />
+                                </Grid>
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                                <Label Text="{Binding Name}" FontSize="15" FontAttributes="Bold" LineBreakMode="TailTruncation"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                                <Label Text="{Binding DateText}" FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding DetailText}" FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="2" VerticalOptions="Center" HorizontalOptions="End" Spacing="4">
+                                <Label Text="{Binding TotalText}" FontSize="17" FontAttributes="Bold" HorizontalTextAlignment="End"
+                                       TextColor="{StaticResource Primary}" />
+                                <Button Text="⋯" FontSize="18" Padding="0" WidthRequest="40" HeightRequest="32" HorizontalOptions="End"
+                                        BackgroundColor="Transparent"
+                                        TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}"
+                                        Command="{Binding BindingContext.MoreCommand, Source={x:Reference Root}, x:DataType=ContentPage}" CommandParameter="{Binding .}"
+                                        SemanticProperties.Description="Altre azioni" />
+                            </VerticalStackLayout>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <VerticalStackLayout IsVisible="{Binding IsEmpty}" VerticalOptions="Center" HorizontalOptions="Center" Spacing="8" Padding="32">
+            <Label Text="🗂" FontSize="48" HorizontalOptions="Center" />
+            <Label Text="Nessuna sessione salvata" FontSize="16" FontAttributes="Bold" HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray800}, Dark=White}" />
+            <Label Text="Le sessioni di conteggio compaiono qui, con mosaico, monete e totale." FontSize="13"
+                   HorizontalTextAlignment="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

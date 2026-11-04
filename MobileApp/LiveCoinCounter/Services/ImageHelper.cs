@@ -112,6 +112,60 @@ public static class ImageHelper
         }
     }
 
+    /// <summary>
+    /// Il mosaico di una sessione con il riquadro di ogni moneta e il suo valore (verde sicura, arancione incerta,
+    /// blu corretta a mano, grigio esclusa). Null se la sessione non ha un mosaico salvato.
+    /// </summary>
+    public static byte[]? DrawSessionMosaic(LiveCoinCounter.Sessions.SessionRecord session, IReadOnlyList<LiveCoinCounter.Sessions.CoinRecord> coins)
+    {
+        if (session.MosaicPreviewPath is not { } path || !File.Exists(path)) return null;
+        try
+        {
+            using var decoded = BitmapFactory.DecodeFile(path);
+            if (decoded is null) return null;
+            using var bitmap = decoded.Copy(Bitmap.Config.Argb8888!, true)!;
+            using var canvas = new Canvas(bitmap);
+            var unit = Math.Max(bitmap.Width, bitmap.Height) / 400f;
+            using var box = new Android.Graphics.Paint { AntiAlias = true, StrokeWidth = Math.Max(2f, unit * 1.2f) };
+            box.SetStyle(Android.Graphics.Paint.Style.Stroke);
+            using var text = new Android.Graphics.Paint { AntiAlias = true, TextSize = Math.Max(12f, unit * 7f), FakeBoldText = true, Color = Android.Graphics.Color.Black };
+            using var back = new Android.Graphics.Paint { AntiAlias = true };
+
+            foreach (var c in coins)
+            {
+                var color = c.State switch
+                {
+                    LiveCoinCounter.Sessions.CoinState.Rejected => Android.Graphics.Color.Rgb(150, 150, 150),
+                    LiveCoinCounter.Sessions.CoinState.Corrected => Android.Graphics.Color.Rgb(33, 150, 243),
+                    _ when c.IsUncertain => Android.Graphics.Color.Rgb(255, 152, 0),
+                    _ => Android.Graphics.Color.Rgb(46, 204, 113)
+                };
+                var s = session.PreviewScale;
+                var x = (float)((c.X - session.PreviewOriginX) * s);
+                var y = (float)((c.Y - session.PreviewOriginY) * s);
+                var w = c.Width * s;
+                var h = c.Height * s;
+                box.Color = color;
+                canvas.DrawRect(x, y, x + w, y + h, box);
+
+                if (c.EffectiveCents is not { } cents) continue;
+                var label = cents >= 100 ? $"{cents / 100}€" : $"{cents}c";
+                var width = text.MeasureText(label) + 6;
+                back.Color = color;
+                canvas.DrawRect(x, y - text.TextSize - 4, x + width, y, back);
+                canvas.DrawText(label, x + 3, y - 4, text);
+            }
+
+            using var output = new MemoryStream();
+            bitmap.Compress(Bitmap.CompressFormat.Jpeg!, 88, output);
+            return output.ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>Piccola immagine bianca usata per verificare la connessione a un provider.</summary>
     public static byte[] CreateTestImage()
     {

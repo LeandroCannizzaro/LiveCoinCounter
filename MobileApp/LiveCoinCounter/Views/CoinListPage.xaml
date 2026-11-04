@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LiveCoinCounter.ViewModels"
+             x:Class="LiveCoinCounter.Views.CoinListPage"
+             x:DataType="vm:CoinListViewModel"
+             x:Name="Root"
+             Title="Monete"
+             BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+
+    <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="*,Auto" Padding="16,10">
+            <Label Text="{Binding SummaryText}" VerticalOptions="Center" FontSize="13"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+            <HorizontalStackLayout Grid.Column="1" Spacing="6">
+                <Label Text="Solo incerte" VerticalOptions="Center" FontSize="13"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
+                <Switch IsToggled="{Binding OnlyUncertain}" />
+            </HorizontalStackLayout>
+        </Grid>
+
+        <CollectionView Grid.Row="1" ItemsSource="{Binding Coins}" SelectionMode="None" Margin="12,0">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:CoinItem">
+                    <Border Margin="0,0,0,8" Padding="10" StrokeThickness="0" StrokeShape="RoundRectangle 12"
+                            BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding BindingContext.OpenCommand, Source={x:Reference Root}, x:DataType=ContentPage}" CommandParameter="{Binding .}" />
+                        </Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="64,*" ColumnSpacing="12">
+                            <Border StrokeThickness="0" StrokeShape="RoundRectangle 32" HeightRequest="64" WidthRequest="64" BackgroundColor="#202024">
+                                <Image Source="{Binding Crop}" Aspect="AspectFill" />
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Label Text="{Binding ValueText}" FontSize="15" FontAttributes="Bold"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                                    <Label Grid.Column="1" Text="{Binding Title}" FontSize="11"
+                                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray500}}" />
+                                </Grid>
+                                <ProgressBar Progress="{Binding Confidence}" ProgressColor="{Binding ConfidenceColor}" />
+                                <Label Text="{Binding ConfidenceText}" FontSize="12" TextColor="{Binding ConfidenceColor}" />
+                                <Label Text="{Binding SecondText}" IsVisible="{Binding HasSecond}" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                                <Label Text="{Binding Note}" IsVisible="{Binding HasNote}" FontSize="11"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                            </VerticalStackLayout>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+            <CollectionView.EmptyView>
+                <Label Text="Nessuna moneta da mostrare" HorizontalOptions="Center" Margin="0,40" FontSize="14"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+            </CollectionView.EmptyView>
+        </CollectionView>
+    </Grid>
+</ContentPage>
