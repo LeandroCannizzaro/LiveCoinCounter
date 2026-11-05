@@ -76,6 +76,19 @@ public class MosaicTests
     }
 
     [Fact]
+    public void Tracker_refuses_to_start_on_a_featureless_frame()
+    {
+        var tracker = new FeatureMosaicTracker(new OrbLite());
+        var flat = new ArgbImage(W, H, Enumerable.Repeat(ImageOps.Argb(30, 30, 30), W * H).ToArray());
+
+        var result = tracker.Process(new CameraFrame(flat, 0, 0));
+
+        Assert.Equal(TrackStatus.Initializing, result.Status);
+        Assert.Null(result.FrameToMosaic);
+        Assert.NotNull(result.Hint);
+    }
+
+    [Fact]
     public void Canvas_writes_each_table_point_once_and_prefers_better_frames()
     {
         var canvas = new MosaicCanvas();

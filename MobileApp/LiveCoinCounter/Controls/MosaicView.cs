@@ -16,6 +16,9 @@ public class MosaicView : View
     public IReadOnlyList<OverlayBox> Boxes { get; set; } = Array.Empty<OverlayBox>();
     public Quad? FrameQuad { get; set; }
 
+    /// <summary>Ultima zona in cui il tracking era valido, mostrata (in arancione) solo quando la posizione è persa.</summary>
+    public Quad? GhostQuad { get; set; }
+
     /// <summary>Ultimo fotogramma della fotocamera (ridotto) e la sua rotazione per mostrarlo dritto.</summary>
     public ArgbImage? Preview { get; set; }
     public int PreviewRotation { get; set; }
@@ -34,6 +37,7 @@ public class MosaicView : View
         Source = null;
         Boxes = Array.Empty<OverlayBox>();
         FrameQuad = null;
+        GhostQuad = null;
         Preview = null;
         Handler?.Invoke(nameof(Clear));
     }

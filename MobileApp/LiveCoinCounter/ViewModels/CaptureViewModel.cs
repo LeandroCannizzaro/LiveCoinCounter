@@ -26,6 +26,8 @@ public sealed class CaptureViewModel : ObservableObject
     private State _state = State.Idle;
     private volatile TrackingUpdate? _lastTracking;
     private volatile bool _coinsChanged;
+    private volatile string? _lastError;
+    private long _lastErrorTick;
     private CameraFrame? _latestFrame;
     private string? _hint;
     private string _statusText = "Tocca ▶ e muovi lentamente il telefono sopra il tavolo";
@@ -38,9 +40,14 @@ public sealed class CaptureViewModel : ObservableObject
         ToggleCommand = new Command(async () => await ToggleAsync(), () => _state is State.Idle or State.Capturing);
         ImportPhotoCommand = new Command(async () => await ImportPhotoAsync(), () => _state == State.Idle);
         CancelProcessingCommand = new Command(() => _processingCts?.Cancel());
+        RestartCommand = new Command(async () => await RestartAsync(), () => _state == State.Capturing);
     }
 
     public ICommand ToggleCommand { get; }
+
+    /// <summary>Salva la parte acquisita come sessione a sé e ricomincia da capo (utile quando il tracking è perso).</summary>
+    public ICommand RestartCommand { get; }
+    public bool CanRestart => _state == State.Capturing;
     public ICommand ImportPhotoCommand { get; }
     public ICommand CancelProcessingCommand { get; }
 
@@ -168,7 +175,12 @@ public sealed class CaptureViewModel : ObservableObject
         engine.TrackingUpdated += u => _lastTracking = u;
         engine.MosaicChanged += tiles => _changedTiles.Enqueue(tiles);
         engine.CoinsChanged += _ => _coinsChanged = true;
-        engine.Error += ex => System.Diagnostics.Debug.WriteLine($"Errore motore: {ex}");
+        engine.Error += ex =>
+        {
+            System.Diagnostics.Debug.WriteLine($"Errore motore: {ex}");
+            _lastError = ex.Message;
+            Interlocked.Exchange(ref _lastErrorTick, Environment.TickCount64);
+        };
 
         _timer ??= Application.Current!.Dispatcher.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(120);
@@ -196,9 +208,15 @@ public sealed class CaptureViewModel : ObservableObject
 
         if (_lastTracking is { } update)
         {
-            _view.FrameQuad = _state == State.Capturing ? update.FrameQuad : null;
+            var capturing = _state == State.Capturing;
+            _view.FrameQuad = capturing ? update.FrameQuad : null;
+            _view.GhostQuad = capturing && update.Status == TrackStatus.Lost ? update.LastKnownQuad : null;
             Hint = update.Hint ?? (update.PendingDetections > 3 ? "Analisi in corso: rallenta un po'" : null);
         }
+
+        // un errore del motore si vede per qualche secondo, invece di lasciare la schermata ferma senza spiegazioni
+        if (_lastError is { } error && Environment.TickCount64 - Interlocked.Read(ref _lastErrorTick) < 6000)
+            Hint = $"Errore: {error}";
 
         // anteprima della fotocamera: l'ultimo fotogramma, ridotto (solo durante l'acquisizione)
         var frame = _state == State.Capturing ? _controller.LatestFrame : null;
@@ -232,6 +250,43 @@ public sealed class CaptureViewModel : ObservableObject
             await ShowAlert("Errore", $"La sessione non è stata completata: {ex.Message}");
             Finish();
         }
+    }
+
+    /// <summary>
+    /// «Ricomincia»: ferma e salva la parte acquisita (resta una sessione a sé, riconosciuta in secondo piano) e avvia
+    /// subito una nuova acquisizione. Non si perde nulla di quanto già coperto.
+    /// </summary>
+    private async Task RestartAsync()
+    {
+        if (_state != State.Capturing || _controller is null) return;
+        var previous = _controller;
+        SetState(State.Stopping);
+        StatusText = "Salvo la parte acquisita…";
+        Hint = null;
+        try
+        {
+            await previous.StopAsync();
+            OnTick(null, EventArgs.Empty);
+            if (_view is not null) { _view.FrameQuad = null; _view.GhostQuad = null; }
+        }
+        catch (Exception ex)
+        {
+            await ShowAlert("Errore", $"La sessione non è stata salvata: {ex.Message}");
+            Finish();
+            return;
+        }
+
+        _controller = null;
+        _timer?.Stop();
+        var partialId = previous.Session.Id;
+        _ = Task.Run(async () =>
+        {
+            try { await SessionProcessing.ClassifyAsync(partialId, null, CancellationToken.None); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Riconoscimento della sessione parziale: {ex}"); }
+        });
+
+        SetState(State.Idle);
+        await StartAsync();
     }
 
     private async Task ImportPhotoAsync()
@@ -314,6 +369,8 @@ public sealed class CaptureViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowCounter));
         ((Command)ToggleCommand).ChangeCanExecute();
         ((Command)ImportPhotoCommand).ChangeCanExecute();
+        ((Command)RestartCommand).ChangeCanExecute();
+        OnPropertyChanged(nameof(CanRestart));
         var fullScreen = state is not State.Idle;
         if (fullScreen != wasFullScreen) FullScreenChanged?.Invoke(fullScreen);
     }

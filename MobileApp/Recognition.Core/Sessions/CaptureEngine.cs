@@ -12,6 +12,9 @@ public sealed record CaptureOptions
     public double MinRelativeSharpness { get; init; } = 0.55;
     public double MinAbsoluteSharpness { get; init; } = 12;
 
+    /// <summary>Nitidezza minima del primo fotogramma chiave: è la base di tutto il mosaico, non può essere sfocato.</summary>
+    public double FirstKeyframeMinSharpness { get; init; } = 20;
+
     /// <summary>Lato del ritaglio salvato per ogni moneta.</summary>
     public int CropSize { get; init; } = 256;
 
@@ -19,8 +22,12 @@ public sealed record CaptureOptions
     public int StillMosaicMaxSide { get; init; } = 2048;
 }
 
-/// <summary>Stato del tracking per l'interfaccia.</summary>
-public sealed record TrackingUpdate(TrackStatus Status, string? Hint, Quad? FrameQuad, int Keyframes, int PendingDetections, bool MosaicFull);
+/// <summary>
+/// Stato del tracking per l'interfaccia. <paramref name="LastKnownQuad"/> è l'ultima zona in cui il fotogramma è stato
+/// collocato: quando il tracking è perso indica all'operatore dove tornare.
+/// </summary>
+public sealed record TrackingUpdate(TrackStatus Status, string? Hint, Quad? FrameQuad, int Keyframes, int PendingDetections, bool MosaicFull,
+    Quad? LastKnownQuad = null);
 
 /// <summary>Una moneta da salvare: <see cref="Crop"/> è valorizzato quando c'è un ritaglio nuovo o migliore.</summary>
 public sealed record CoinChange(CoinTrack Track, bool IsNew, ArgbImage? Crop);
@@ -58,6 +65,7 @@ public sealed class CaptureEngine
     private Task? _detectionTask;
     private int _keyframeCount;
     private int _pending;
+    private Quad? _lastKnownQuad;
     private volatile bool _busy;
 
     public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null)
@@ -143,10 +151,18 @@ public sealed class CaptureEngine
         if (result.FrameToMosaic is { } h)
         {
             quad = h.MapRect(frame.Image.Width, frame.Image.Height);
+            _lastKnownQuad = quad;
             var median = MedianSharpness(result.Sharpness);
             var sharpEnough = result.Sharpness >= _options.MinAbsoluteSharpness &&
                               (median <= 0 || result.Sharpness >= median * _options.MinRelativeSharpness);
             var newArea = _coverage.CoveredFraction(quad.Value) < _options.KeyframeMaxCoverage;
+
+            // il primo fotogramma chiave fissa orientamento e scala di tutto il mosaico: deve essere nitido
+            if (_keyframeCount == 0 && result.Sharpness < _options.FirstKeyframeMinSharpness)
+            {
+                sharpEnough = false;
+                hint ??= "Immagine sfocata o troppo scura: tieni fermo il telefono su una zona con le monete, aggiungi luce";
+            }
 
             if (newArea && sharpEnough && !Canvas.IsFull)
             {
@@ -162,7 +178,7 @@ public sealed class CaptureEngine
         }
 
         if (Canvas.IsFull) hint = "Superficie massima raggiunta: ferma l'acquisizione";
-        TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull));
+        TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad));
     }
 
     private async Task AddKeyframeAsync(ArgbImage image, Homography h, float quality, double sharpness)

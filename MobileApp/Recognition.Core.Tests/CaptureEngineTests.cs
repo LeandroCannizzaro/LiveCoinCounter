@@ -29,7 +29,7 @@ public class CaptureEngineTests
         var sink = new MemorySink();
         var tracker = new FeatureMosaicTracker(new OrbLite(), new FeatureTrackerOptions { MosaicScale = 1 });
         var engine = new CaptureEngine(tracker, locator, sink, new MosaicCanvas(),
-            new CaptureOptions { MinAbsoluteSharpness = 0 });
+            new CaptureOptions { MinAbsoluteSharpness = 0, FirstKeyframeMinSharpness = 0 });
         engine.Start();
 
         // passata a serpentina: due righe che si sovrappongono di 120 px (più di una moneta), spostamenti di 50 px
@@ -59,6 +59,50 @@ public class CaptureEngineTests
     }
 
     [Fact]
+    public async Task Lost_tracking_reports_the_last_known_position()
+    {
+        var scene = new SyntheticScene(1200, 900, seed: 9);
+        var other = new SyntheticScene(1200, 900, seed: 77);
+        var updates = new List<TrackingUpdate>();
+        var tracker = new FeatureMosaicTracker(new OrbLite(), new FeatureTrackerOptions { LostAfter = 2 });
+        var engine = new CaptureEngine(tracker, new OracleLocator(scene), new MemorySink(), new MosaicCanvas(),
+            new CaptureOptions { MinAbsoluteSharpness = 0, FirstKeyframeMinSharpness = 0 });
+        engine.TrackingUpdated += u => { lock (updates) updates.Add(u); };
+        engine.Start();
+
+        var view = SyntheticScene.View(500, 450, W, H);
+        await PushAndWaitAsync(engine, new CameraFrame(scene.Render(view, W, H), 0, 0), 0);
+        for (var i = 1; i <= 4; i++)
+            await PushAndWaitAsync(engine, new CameraFrame(other.Render(view, W, H), i, 0), i);
+        await engine.StopAsync();
+
+        TrackingUpdate[] snapshot;
+        lock (updates) snapshot = updates.ToArray();
+        var lost = Assert.Single(snapshot.Where(u => u.Status == TrackStatus.Lost).Take(1));
+        Assert.Null(lost.FrameQuad);
+        Assert.NotNull(lost.LastKnownQuad);
+        Assert.Contains("riquadro arancione", lost.Hint);
+    }
+
+    [Fact]
+    public async Task Blurry_first_frame_does_not_start_the_mosaic()
+    {
+        var scene = new SyntheticScene(1200, 900, seed: 9);
+        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite()), new OracleLocator(scene), new MemorySink(), new MosaicCanvas(),
+            new CaptureOptions { FirstKeyframeMinSharpness = 1e9 });
+        TrackingUpdate? last = null;
+        engine.TrackingUpdated += u => last = u;
+        engine.Start();
+
+        await PushAndWaitAsync(engine, new CameraFrame(scene.Render(SyntheticScene.View(500, 450, W, H), W, H), 0, 0), 0);
+        await engine.StopAsync();
+
+        Assert.Equal(0, engine.KeyframeCount);
+        Assert.Equal(0, engine.Canvas.TileCount);
+        Assert.Contains("sfocata", last?.Hint);
+    }
+
+    [Fact]
     public async Task Still_photo_is_a_single_keyframe()
     {
         var scene = new SyntheticScene(800, 600, seed: 2);
@@ -76,6 +120,15 @@ public class CaptureEngineTests
         Assert.Equal(1, engine.KeyframeCount);
         Assert.Equal(2, engine.Coins.Count);
         Assert.True(engine.Canvas.TileCount > 0);
+    }
+
+    /// <summary>Consegna un fotogramma e aspetta che il motore l'abbia elaborato.</summary>
+    private static async Task PushAndWaitAsync(CaptureEngine engine, CameraFrame frame, int _)
+    {
+        while (!engine.WantsFrame) await Task.Delay(1);
+        engine.PushFrame(frame);
+        await Task.Delay(5);
+        while (!engine.WantsFrame) await Task.Delay(1);
     }
 
     /// <summary>Rilevatore perfetto: proietta le monete vere del tavolo nel fotogramma corrente.</summary>

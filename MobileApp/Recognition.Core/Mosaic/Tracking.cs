@@ -50,6 +50,9 @@ public sealed record FeatureTrackerOptions
 
     /// <summary>Dopo quanti fotogrammi non collocati di fila il tracking si considera perso.</summary>
     public int LostAfter { get; init; } = 4;
+
+    /// <summary>Punti minimi nel primo fotogramma: senza, il mosaico partirebbe da una base su cui non ci si può riagganciare.</summary>
+    public int MinInitialFeatures { get; init; } = 40;
 }
 
 /// <summary>
@@ -91,6 +94,10 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
 
         if (_keyframes.Count == 0)
         {
+            if (features.Count < _options.MinInitialFeatures)
+                return new TrackResult(TrackStatus.Initializing, null, sharpness,
+                    "Inquadra una zona con le monete e tieni fermo il telefono (serve più luce o più dettaglio)", Inliers: features.Count);
+
             var initial = prior ?? Initial(frame);
             _last = initial;
             return new TrackResult(TrackStatus.Tracking, initial, sharpness, Inliers: features.Count);
@@ -132,7 +139,7 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
             _lostFrames++;
             var lost = _lostFrames >= _options.LostAfter;
             return new TrackResult(lost ? TrackStatus.Lost : TrackStatus.Tracking, null, sharpness,
-                lost ? "Posizione persa: torna su una zona già ripresa" : null);
+                lost ? "Posizione persa: torna dove vedi il riquadro arancione, oppure tocca ↻ per ricominciare" : null);
         }
 
         _lostFrames = 0;

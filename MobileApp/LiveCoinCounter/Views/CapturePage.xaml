@@ -58,6 +58,15 @@
                 BackgroundColor="#55000000" BorderColor="#CCFFFFFF" BorderWidth="2"
                 SemanticProperties.Description="Avvia o ferma l'acquisizione" />
 
+        <!-- Ricomincia: salva la parte acquisita e riparte (solo durante l'acquisizione) -->
+        <Button Text="↻"
+                Command="{Binding RestartCommand}"
+                IsVisible="{Binding CanRestart}"
+                VerticalOptions="End" HorizontalOptions="End" Margin="0,0,28,38"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="24" TextColor="White" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Salva la parte acquisita e ricomincia" />
+
         <!-- Importa una foto (solo a riposo) -->
         <Button Text="🖼"
                 Command="{Binding ImportPhotoCommand}"

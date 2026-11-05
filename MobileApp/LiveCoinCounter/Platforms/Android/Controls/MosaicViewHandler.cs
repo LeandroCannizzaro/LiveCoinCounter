@@ -43,10 +43,12 @@ public sealed class MosaicPlatformView : AView
     private readonly APaint _boxPaint = new() { AntiAlias = true };
     private readonly APaint _labelPaint = new() { AntiAlias = true, FakeBoldText = true };
     private readonly APaint _labelBack = new() { AntiAlias = true };
+    private readonly APaint _ghostPaint = new() { AntiAlias = true };
     private readonly APaint _quadPaint = new() { AntiAlias = true, Color = AColor.White };
     private readonly APaint _textPaint = new() { AntiAlias = true, Color = AColor.Argb(200, 255, 255, 255), TextAlign = APaint.Align.Center };
     private IReadOnlyList<OverlayBox> _boxes = Array.Empty<OverlayBox>();
     private Quad? _quad;
+    private Quad? _ghost;
     private Mosaic.RectF _bounds;
     private Bitmap? _preview;
     private int _previewRotation;
@@ -70,6 +72,7 @@ public sealed class MosaicPlatformView : AView
     {
         _boxes = view.Boxes;
         _quad = view.FrameQuad;
+        _ghost = view.GhostQuad;
         _emptyText = view.EmptyText;
         var canvas = view.Source;
         if (canvas is not null)
@@ -114,6 +117,7 @@ public sealed class MosaicPlatformView : AView
         _preview = null;
         _boxes = Array.Empty<OverlayBox>();
         _quad = null;
+        _ghost = null;
         _bounds = default;
         ResetZoom();
     }
@@ -146,6 +150,11 @@ public sealed class MosaicPlatformView : AView
         {
             var qb = q.Bounds;
             content = Mosaic.RectF.FromBounds(Math.Min(content.X, qb.X), Math.Min(content.Y, qb.Y), Math.Max(content.Right, qb.Right), Math.Max(content.Bottom, qb.Bottom));
+        }
+        if (_ghost is { } g)
+        {
+            var gb = g.Bounds;
+            content = Mosaic.RectF.FromBounds(Math.Min(content.X, gb.X), Math.Min(content.Y, gb.Y), Math.Max(content.Right, gb.Right), Math.Max(content.Bottom, gb.Bottom));
         }
         var padding = 24 * density;
         var fit = Math.Min((Width - 2 * padding) / content.Width, (Height - 2 * padding) / content.Height);
@@ -185,17 +194,45 @@ public sealed class MosaicPlatformView : AView
         if (_quad is { } quad)
         {
             _quadPaint.StrokeWidth = 2 * density / scale;
-            using var path = new global::Android.Graphics.Path();
-            path.MoveTo((float)quad.A.X, (float)quad.A.Y);
-            path.LineTo((float)quad.B.X, (float)quad.B.Y);
-            path.LineTo((float)quad.C.X, (float)quad.C.Y);
-            path.LineTo((float)quad.D.X, (float)quad.D.Y);
-            path.Close();
+            using var path = QuadPath(quad);
             canvas.DrawPath(path, _quadPaint);
+        }
+
+        // posizione persa: l'ultima zona nota, in arancione, dove l'operatore deve tornare
+        if (_ghost is { } ghost)
+        {
+            using var path = QuadPath(ghost);
+            _ghostPaint.SetStyle(APaint.Style.Fill);
+            _ghostPaint.Color = AColor.Argb(70, 255, 152, 0);
+            canvas.DrawPath(path, _ghostPaint);
+            _ghostPaint.SetStyle(APaint.Style.Stroke);
+            _ghostPaint.StrokeWidth = 4 * density / scale;
+            _ghostPaint.Color = AColor.Rgb(255, 152, 0);
+            canvas.DrawPath(path, _ghostPaint);
+
+            var text = "Torna qui";
+            _labelPaint.TextSize = 18 * density / scale;
+            var w = _labelPaint.MeasureText(text);
+            float cx = (float)ghost.Bounds.CenterX, cy = (float)ghost.Bounds.CenterY;
+            _labelBack.Color = AColor.Rgb(255, 152, 0);
+            canvas.DrawRect(cx - w / 2 - 6 * density / scale, cy - _labelPaint.TextSize, cx + w / 2 + 6 * density / scale, cy + 8 * density / scale, _labelBack);
+            _labelPaint.Color = AColor.Black;
+            canvas.DrawText(text, cx - w / 2, cy, _labelPaint);
         }
         canvas.Restore();
 
         DrawPreview(canvas, density);
+    }
+
+    private static global::Android.Graphics.Path QuadPath(Quad quad)
+    {
+        var path = new global::Android.Graphics.Path();
+        path.MoveTo((float)quad.A.X, (float)quad.A.Y);
+        path.LineTo((float)quad.B.X, (float)quad.B.Y);
+        path.LineTo((float)quad.C.X, (float)quad.C.Y);
+        path.LineTo((float)quad.D.X, (float)quad.D.Y);
+        path.Close();
+        return path;
     }
 
     /// <summary>Anteprima della fotocamera in alto a destra, raddrizzata.</summary>
