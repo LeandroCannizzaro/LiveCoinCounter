@@ -94,11 +94,11 @@ public sealed class SessionClassifier
 
         // controllo del diametro su tutte le monete classificate della sessione, incluse quelle di passate precedenti
         var items = coins.Where(c => c.State != CoinState.Rejected && !c.IsManual)
-            .Select(c => results.TryGetValue(c.Id, out var r) ? new DiameterCheck.Item(c.Id, c.Diameter, r, c.X + c.Width / 2, c.Y + c.Height / 2)
+            .Select(c => results.TryGetValue(c.Id, out var r) ? new DiameterCheck.Item(c.Id, c.Diameter, r, c.X + c.Width / 2, c.Y + c.Height / 2, c.ColorTint)
                 : c.Cents is { } cents && c.State != CoinState.Detected
                     ? new DiameterCheck.Item(c.Id, c.Diameter, new CoinClassification(c.CorrectedCents ?? cents,
                         c.State == CoinState.Corrected ? 1f : c.ClassConfidence, Array.Empty<(int, float)>(), c.ClassifierId ?? ""),
-                        c.X + c.Width / 2, c.Y + c.Height / 2)
+                        c.X + c.Width / 2, c.Y + c.Height / 2, c.ColorTint)
                     : null)
             .Where(i => i is not null).Cast<DiameterCheck.Item>().ToList();
         var checkedItems = DiameterCheck.Apply(items, session.PxPerMm).ToDictionary(i => i.CoinId);

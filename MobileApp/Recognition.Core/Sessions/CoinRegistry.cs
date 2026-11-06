@@ -26,6 +26,9 @@ public sealed class CoinTrack
 
     /// <summary>"Acquisita": vista in almeno due fotogrammi chiave (altrimenti "in verifica").</summary>
     public bool IsStable => Observations >= 2;
+
+    /// <summary>I fotogrammi chiave in cui è stata vista: due monete dello stesso fotogramma sono sempre monete diverse.</summary>
+    internal HashSet<int> Keyframes { get; } = new();
 }
 
 /// <summary>Una moneta trovata dal rilevatore in un fotogramma chiave.</summary>
@@ -36,10 +39,16 @@ public sealed record CoinUpdate(CoinTrack Track, bool IsNew, bool IsBetter);
 
 /// <summary>
 /// Deduplica in coordinate del mosaico: la stessa moneta vista in più fotogrammi chiave diventa una sola. Due riquadri
-/// sono la stessa moneta se i centri distano meno di mezzo diametro e le dimensioni sono simili.
+/// sono la stessa moneta se i centri distano meno di <see cref="MergeDistanceFactor"/> diametri e le dimensioni sono simili,
+/// e solo se sono visti in fotogrammi chiave diversi: nello stesso fotogramma monete diverse non si fondono mai, neanche se
+/// una è sopra l'altra. Il margine è largo perché il mosaico si deforma (prospettiva accumulata): la stessa moneta può
+/// cadere a una distanza di oltre mezzo diametro da un fotogramma all'altro.
 /// </summary>
 public sealed class CoinRegistry
 {
+    /// <summary>Distanza massima tra i centri, in diametri, per considerare due osservazioni la stessa moneta.</summary>
+    public const double MergeDistanceFactor = 0.75;
+
     private readonly List<CoinTrack> _tracks = new();
     private readonly object _sync = new();
     private int _nextId = 1;
@@ -53,7 +62,7 @@ public sealed class CoinRegistry
         lock (_sync)
         {
             var score = o.Confidence * o.Quality;
-            var match = FindMatch(o.MosaicBox);
+            var match = FindMatch(o.MosaicBox, o.Keyframe);
 
             if (match is null)
             {
@@ -68,6 +77,7 @@ public sealed class CoinRegistry
                     DetectorCents = o.Cents,
                     DetectorClassConfidence = o.ClassConfidence
                 };
+                track.Keyframes.Add(o.Keyframe);
                 _tracks.Add(track);
                 return new CoinUpdate(track, true, true);
             }
@@ -82,6 +92,7 @@ public sealed class CoinRegistry
                 (b.Width * w0 + n.Width * w1) / (w0 + w1), (b.Height * w0 + n.Height * w1) / (w0 + w1));
             match.DetectionConfidence = Math.Max(match.DetectionConfidence, o.Confidence);
             match.Observations++;
+            match.Keyframes.Add(o.Keyframe);
 
             if (o.Cents is not null && o.ClassConfidence > match.DetectorClassConfidence)
             {
@@ -100,16 +111,17 @@ public sealed class CoinRegistry
         }
     }
 
-    private CoinTrack? FindMatch(RectF box)
+    private CoinTrack? FindMatch(RectF box, int keyframe)
     {
         CoinTrack? best = null;
         var bestDistance = double.MaxValue;
         foreach (var t in _tracks)
         {
+            if (t.Keyframes.Contains(keyframe)) continue;      // stesso fotogramma: è un'altra moneta
             var d = Math.Sqrt(Math.Pow(t.MosaicBox.CenterX - box.CenterX, 2) + Math.Pow(t.MosaicBox.CenterY - box.CenterY, 2));
             var diameter = Math.Max(t.MosaicBox.Diameter, box.Diameter);
             var sizeRatio = box.Diameter / Math.Max(1e-3f, t.MosaicBox.Diameter);
-            if (d < 0.5 * diameter && sizeRatio is > 0.6f and < 1.67f && d < bestDistance)
+            if (d < MergeDistanceFactor * diameter && sizeRatio is > 0.6f and < 1.67f && d < bestDistance)
             {
                 best = t;
                 bestDistance = d;

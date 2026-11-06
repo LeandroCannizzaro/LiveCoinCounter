@@ -132,7 +132,8 @@ public static class DiameterCheck
     public const double NeighbourRadiusDiameters = 6;
 
     /// <param name="X">Centro nel mosaico; NaN se non noto (si usa allora la scala di tutta la sessione).</param>
-    public sealed record Item(int CoinId, float DiameterPx, CoinClassification Classification, float X = float.NaN, float Y = float.NaN);
+    /// <param name="Tint">Colore del ritaglio ("copper" o "gold"): il diametro non può riportare a un taglio di un altro colore.</param>
+    public sealed record Item(int CoinId, float DiameterPx, CoinClassification Classification, float X = float.NaN, float Y = float.NaN, string? Tint = null);
 
     public static double? EstimatePxPerMm(IEnumerable<Item> items)
     {
@@ -177,7 +178,9 @@ public static class DiameterCheck
             double Error(int cents) => Math.Abs(mm - EuroCoins.DiameterOf(cents)) / EuroCoins.DiameterOf(cents);
             if (Error(c.Cents) <= tolerance) return item;
 
-            var alternative = c.TopK.Where(k => k.Cents != c.Cents && k.Score >= 0.15f && Error(k.Cents) <= tolerance * 0.6)
+            // il controllo sul colore ha già scartato i tagli di un altro colore: il diametro non li deve far tornare
+            bool ColorFits(int cents) => item.Tint is not (CoinColor.Copper or CoinColor.Gold) || ColorCheck.IsCopperDenomination(cents) == (item.Tint == CoinColor.Copper);
+            var alternative = c.TopK.Where(k => k.Cents != c.Cents && k.Score >= 0.15f && Error(k.Cents) <= tolerance * 0.6 && ColorFits(k.Cents))
                 .OrderByDescending(k => k.Score).Cast<(int Cents, float Score)?>().FirstOrDefault();
             if (alternative is { } alt)
                 return item with

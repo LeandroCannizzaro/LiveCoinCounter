@@ -29,7 +29,7 @@
 
         <!-- I dati della moneta toccata -->
         <Border IsVisible="{Binding HasDetail}" VerticalOptions="End" Margin="12,0,12,24" Padding="12,8" StrokeThickness="0"
-                StrokeShape="RoundRectangle 12" BackgroundColor="#DD1A1A1E">
+                StrokeShape="RoundRectangle 12" BackgroundColor="#B81A1A1E">
             <VerticalStackLayout Spacing="8">
                 <Label Text="{Binding DetailText}" TextColor="White" FontSize="12" LineBreakMode="WordWrap" />
                 <Button Text="✎ Modifica" Command="{Binding EditCommand}" HorizontalOptions="Fill" HeightRequest="40" CornerRadius="20"

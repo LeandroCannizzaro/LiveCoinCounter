@@ -46,6 +46,13 @@
                 <Label Text="{Binding History}" FontSize="13" LineBreakMode="WordWrap"
                        TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
             </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="6">
+                <Label Text="CARATTERISTICHE DELLA RILEVAZIONE" FontSize="11" FontAttributes="Bold" CharacterSpacing="1"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                <Label Text="{Binding DetailsText}" FontSize="13" LineBreakMode="WordWrap"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
+            </VerticalStackLayout>
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

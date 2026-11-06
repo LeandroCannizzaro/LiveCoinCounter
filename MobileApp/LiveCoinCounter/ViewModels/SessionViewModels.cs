@@ -524,7 +524,7 @@ public sealed class CoinListViewModel : ObservableObject, IQueryAttributable
 /// <summary>Dettaglio di una moneta con correzione manuale del taglio.</summary>
 public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
 {
-    public const string NotACoin = "Non è una moneta";
+    public const string NotACoin = "Falso rilevamento (non è una moneta)";
     public const string Duplicate = "Doppione (già contata)";
 
     private int _coinId;
@@ -533,6 +533,7 @@ public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
     private string? _selectedChoice;
     private string _history = string.Empty;
     private string _truthNote = string.Empty;
+    private string _detailsText = string.Empty;
 
     public CoinDetailViewModel()
     {
@@ -570,6 +571,13 @@ public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
         set => SetProperty(ref _selectedChoice, value);
     }
 
+    /// <summary>Le caratteristiche della rilevazione (le stesse che si vedono nella superficie a tutto schermo).</summary>
+    public string DetailsText
+    {
+        get => _detailsText;
+        private set => SetProperty(ref _detailsText, value);
+    }
+
     public string History
     {
         get => _history;
@@ -588,6 +596,9 @@ public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
         _coin = await SessionServices.Repository.GetCoinAsync(_coinId);
         if (_coin is null) return;
         Item = new CoinItem(_coin);
+        var session = await SessionServices.Repository.GetSessionAsync(_coin.SessionId);
+        var all = await SessionServices.Repository.ListCoinsAsync(_coin.SessionId);
+        DetailsText = CoinDescription.Describe(_coin, session is null ? null : SessionServices.ScaleOf(session, all));
         TruthNote = _coin.TruthNote ?? string.Empty;
         SelectedChoice = _coin.State == CoinState.Rejected ? (_coin.TruthKind == TruthKinds.Duplicate ? Duplicate : NotACoin)
             : _coin.EffectiveCents is { } c ? EuroCoins.NameOf(c) : null;

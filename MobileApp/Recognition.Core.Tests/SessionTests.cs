@@ -32,6 +32,36 @@ public class CoinRegistryTests
         Assert.Equal(2, registry.Count);
     }
 
+    [Fact]
+    public void Coins_in_the_same_keyframe_are_never_merged_even_if_overlapping()
+    {
+        var registry = new CoinRegistry();
+        registry.Observe(new CoinObservation(default, new RectF(100, 100, 40, 40), 0.8f, 1, 0));
+        var onTop = registry.Observe(new CoinObservation(default, new RectF(112, 104, 40, 40), 0.8f, 1, 0));
+        Assert.True(onTop.IsNew);
+        Assert.Equal(2, registry.Count);
+    }
+
+    [Fact]
+    public void Distorted_mosaic_still_merges_the_same_coin_across_keyframes()
+    {
+        // lo stesso 5 cent in due fotogrammi: il mosaico lo mette a più di mezzo diametro di distanza (caso reale)
+        var registry = new CoinRegistry();
+        registry.Observe(new CoinObservation(default, new RectF(100, 100, 135, 135), 0.97f, 1, 1));
+        var again = registry.Observe(new CoinObservation(default, new RectF(130, 150, 197, 197), 0.96f, 1, 2));
+        Assert.False(again.IsNew);
+        Assert.Equal(1, registry.Count);
+    }
+
+    [Fact]
+    public void Adjacent_coins_in_different_keyframes_stay_separate()
+    {
+        var registry = new CoinRegistry();
+        registry.Observe(new CoinObservation(default, new RectF(100, 100, 40, 40), 0.8f, 1, 0));
+        var neighbour = registry.Observe(new CoinObservation(default, new RectF(142, 100, 40, 40), 0.8f, 1, 1));
+        Assert.True(neighbour.IsNew);
+    }
+
     [Theory]
     [InlineData(0, 100, 40, 40, false)]       // tocca il bordo sinistro
     [InlineData(100, 100, 40, 40, true)]
@@ -122,6 +152,20 @@ public class DiameterCheckTests
 
         Assert.Equal(20, result.Single(i => i.CoinId == 4).Classification.Cents);
         Assert.Equal(200, result.Single(i => i.CoinId == 1).Classification.Cents);
+    }
+
+    [Fact]
+    public void Diameter_never_brings_back_a_value_of_the_wrong_colour()
+    {
+        // caso reale: ritaglio di rame letto 50 cent, corretto dal colore a 1 cent; il diametro (gonfiato dalla prospettiva) tornava a 50 cent
+        var classification = new CoinClassification(1, 0.6f, new[] { (50, 0.89f), (1, 0.6f) }, "test");
+        var withoutColour = new DiameterCheck.Item(1, 236f, classification);
+        var copper = new DiameterCheck.Item(1, 236f, classification, Tint: "copper");
+
+        Assert.Equal(50, DiameterCheck.Apply(new[] { withoutColour }, 10.0).Single().Classification.Cents);
+        var result = DiameterCheck.Apply(new[] { copper }, 10.0).Single().Classification;
+        Assert.Equal(1, result.Cents);
+        Assert.True(result.Confidence < 0.6f);
     }
 
     [Fact]
