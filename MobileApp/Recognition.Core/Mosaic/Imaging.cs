@@ -97,6 +97,20 @@ public static class ImageOps
         return gray;
     }
 
+    /// <summary>Luminosità media (0–255) campionando un pixel ogni 8 in ogni direzione: basta per capire se c'è poca luce.</summary>
+    public static double MeanBrightness(ArgbImage image)
+    {
+        long sum = 0;
+        var n = 0;
+        for (var y = 0; y < image.Height; y += 8)
+        for (var x = 0; x < image.Width; x += 8)
+        {
+            sum += Luma(image.Pixels[y * image.Width + x]);
+            n++;
+        }
+        return n == 0 ? 0 : (double)sum / n;
+    }
+
     /// <summary>Nitidezza: varianza del laplaciano (alta = a fuoco, bassa = mosso o sfocato).</summary>
     public static double Sharpness(GrayImage image)
     {

@@ -12,10 +12,23 @@ public sealed record CaptureOptions
 
     /// <summary>Nitidezza minima rispetto alla mediana recente: i fotogrammi mossi non entrano nel mosaico.</summary>
     public double MinRelativeSharpness { get; init; } = 0.55;
-    public double MinAbsoluteSharpness { get; init; } = 12;
+    /// <summary>
+    /// Nitidezza minima di ogni fotogramma chiave. I valori sono tarati sulle prove sul campo (10 sessioni): i fotogrammi a
+    /// fuoco misurano 160–240, quelli sfocati 13–39.
+    /// </summary>
+    public double MinAbsoluteSharpness { get; init; } = 30;
 
     /// <summary>Nitidezza minima del primo fotogramma chiave: è la base di tutto il mosaico, non può essere sfocato.</summary>
-    public double FirstKeyframeMinSharpness { get; init; } = 20;
+    public double FirstKeyframeMinSharpness { get; init; } = 60;
+
+    /// <summary>Nitidezza a cui un fotogramma pesa al massimo nel mosaico (assoluta: un fotogramma più nitido sostituisce uno sfocato).</summary>
+    public double SharpnessReference { get; init; } = 150;
+
+    /// <summary>Sotto questa nitidezza mediana (ultimi fotogrammi) si suggerisce di allontanarsi / rimettere a fuoco.</summary>
+    public double BlurryBelow { get; init; } = 45;
+
+    /// <summary>Sotto questa luminosità media (0–255) si suggerisce la torcia.</summary>
+    public double DarkBelow { get; init; } = 55;
 
     /// <summary>Lato del ritaglio salvato per ogni moneta.</summary>
     public int CropSize { get; init; } = 256;
@@ -29,7 +42,7 @@ public sealed record CaptureOptions
 /// collocato: quando il tracking è perso indica all'operatore dove tornare.
 /// </summary>
 public sealed record TrackingUpdate(TrackStatus Status, string? Hint, Quad? FrameQuad, int Keyframes, int PendingDetections, bool MosaicFull,
-    Quad? LastKnownQuad = null);
+    Quad? LastKnownQuad = null, bool Blurry = false, bool Dark = false);
 
 /// <summary>Una moneta da salvare: <see cref="Crop"/> è valorizzato quando c'è un ritaglio nuovo o migliore.</summary>
 public sealed record CoinChange(CoinTrack Track, bool IsNew, ArgbImage? Crop);
@@ -77,6 +90,7 @@ public sealed class CaptureEngine
     private long _statsPushed, _statsSkipped, _statsProcessed, _statsTrackTicks, _statsDetectTicks, _statsDetections;
     private long _lastStatsMs;
     private int _framesSeen;
+    private double _brightnessAverage;
 
     public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null,
         IDiagLog? log = null)
@@ -184,13 +198,19 @@ public sealed class CaptureEngine
         Quad? quad = null;
         var decision = result.FrameToMosaic is null ? "not_placed" : "no_new_area";
         double? coverage = null;
-        double median = 0;
+
+        // nitidezza e luce di tutti i fotogrammi, anche quelli non collocati: servono ai suggerimenti all'operatore
+        var median = MedianSharpness(result.Sharpness);
+        var brightness = ImageOps.MeanBrightness(frame.Image);
+        _brightnessAverage = _framesSeen == 0 ? brightness : _brightnessAverage * 0.85 + brightness * 0.15;
+        var warmedUp = _framesSeen >= 8;
+        var dark = warmedUp && _brightnessAverage < _options.DarkBelow;
+        var blurry = warmedUp && median > 0 && median < _options.BlurryBelow;
 
         if (result.FrameToMosaic is { } h)
         {
             quad = h.MapRect(frame.Image.Width, frame.Image.Height);
             _lastKnownQuad = quad;
-            median = MedianSharpness(result.Sharpness);
             var sharpEnough = result.Sharpness >= _options.MinAbsoluteSharpness &&
                               (median <= 0 || result.Sharpness >= median * _options.MinRelativeSharpness);
             coverage = _coverage.CoveredFraction(quad.Value);
@@ -210,7 +230,8 @@ public sealed class CaptureEngine
                 decision = "keyframe";
                 _tracker.CommitKeyframe(h);
                 _coverage.Mark(quad.Value);
-                var quality = (float)Math.Clamp(median > 0 ? result.Sharpness / (2 * median) : 1, 0.2, 1);
+                // peso assoluto: un fotogramma nitido sostituisce nel mosaico uno sfocato anche se tutti i precedenti erano sfocati
+                var quality = (float)Math.Clamp(result.Sharpness / _options.SharpnessReference, 0.2, 1);
                 await AddKeyframeAsync(frame.Image, h, quality, result.Sharpness);
             }
             else if (newArea && !sharpEnough)
@@ -224,19 +245,23 @@ public sealed class CaptureEngine
             }
         }
 
+        // la causa più probabile prima: con poca luce l'otturatore resta aperto più a lungo e l'immagine si sfoca
+        if (dark && result.Status != TrackStatus.Lost) hint = "Poca luce: accendi la torcia 🔦 per immagini più nitide";
+        else if (hint is null && blurry) hint = "Immagine sfocata: allontana il telefono (25–40 cm) e tienilo fermo";
+
         if (Canvas.IsFull) hint = "Superficie massima raggiunta: ferma l'acquisizione";
-        TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad));
+        TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad, blurry, dark));
 
         if (_log.Enabled)
         {
             _log.Event("frame", new
             {
-                n = _framesSeen++,
+                n = _framesSeen,
                 ts = frame.TimestampNs / 1_000_000,
                 w = frame.Image.Width, h = frame.Image.Height, rot = frame.RotationDegrees,
                 status = result.Status.ToString(),
                 decision,
-                sharp = DiagData.R(result.Sharpness), median = DiagData.R(median),
+                sharp = DiagData.R(result.Sharpness), median = DiagData.R(median), light = DiagData.R(brightness, 0),
                 cover = coverage is { } c ? DiagData.R(c, 2) : (double?)null,
                 inliers = result.Inliers,
                 ms = DiagData.R(trackMs),
@@ -247,6 +272,7 @@ public sealed class CaptureEngine
             });
             LogStatsIfDue();
         }
+        _framesSeen++;
     }
 
     private void LogStatsIfDue()

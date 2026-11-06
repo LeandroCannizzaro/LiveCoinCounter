@@ -1,4 +1,7 @@
+using Android.Content;
+using Android.Hardware.Camera2;
 using Android.Util;
+using AndroidX.Camera.Camera2.InterOp;
 using AndroidX.Camera.Core;
 using AndroidX.Camera.Core.ResolutionSelector;
 using AndroidX.Camera.Lifecycle;
@@ -23,6 +26,8 @@ public sealed class CameraXFrameSource : Java.Lang.Object, IFrameSource, ImageAn
     private Func<bool>? _wantsFrame;
     private int[]? _buffer;
     private byte[]? _bytes;
+    private ICamera? _camera;
+    private bool _supportsTorch;
 
     public string Id => "camerax";
 
@@ -43,17 +48,101 @@ public sealed class CameraXFrameSource : Java.Lang.Object, IFrameSource, ImageAn
         var resolution = new ResolutionSelector.Builder()
             .SetResolutionStrategy(new ResolutionStrategy(new global::Android.Util.Size(1280, 720), ResolutionStrategy.FallbackRuleClosestHigherThenLower))
             .Build();
-        _analysis = new ImageAnalysis.Builder()
+        var builder = new ImageAnalysis.Builder()
             .SetResolutionSelector(resolution)
             .SetBackpressureStrategy(ImageAnalysis.StrategyKeepOnlyLatest)
-            .SetOutputImageFormat(ImageAnalysis.OutputImageFormatRgba8888)
-            .Build();
+            .SetOutputImageFormat(ImageAnalysis.OutputImageFormatRgba8888);
+        TuneForSharpness(activity, builder);
+        _analysis = builder.Build();
         _analysis.SetAnalyzer(_executor, this);
 
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
             _provider.UnbindAll();
-            _provider.BindToLifecycle(owner, CameraSelector.DefaultBackCamera, _analysis);
+            _camera = _provider.BindToLifecycle(owner, CameraSelector.DefaultBackCamera, _analysis);
+            _supportsTorch = _camera?.CameraInfo?.HasFlashUnit == true;
+        });
+    }
+
+    /// <summary>
+    /// Immagini più nitide per il mosaico: autofocus continuo "video" (più stabile, senza "caccia" del fuoco) e frame rate
+    /// fisso a 30 (con poca luce la fotocamera abbassa i fotogrammi al secondo e allunga l'esposizione: l'immagine si sfoca).
+    /// Se il telefono non lo permette si lasciano le impostazioni predefinite.
+    /// </summary>
+    private static void TuneForSharpness(Context context, ImageAnalysis.Builder builder)
+    {
+        try
+        {
+            var extender = new Camera2Interop.Extender(builder);
+            extender.SetCaptureRequestOption(CaptureRequest.ControlAfMode!, Java.Lang.Integer.ValueOf((int)ControlAFMode.ContinuousVideo));
+            if (PickFixedFpsRange(context) is { } range)
+                extender.SetCaptureRequestOption(CaptureRequest.ControlAeTargetFpsRange!, range);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Impostazioni fotocamera predefinite: {ex.Message}");
+        }
+    }
+
+    /// <summary>L'intervallo di frame rate con il limite inferiore più alto tra quelli che arrivano a 30 al massimo (idealmente 30–30).</summary>
+    private static Java.Lang.Object? PickFixedFpsRange(Context context)
+    {
+        var manager = (CameraManager)context.GetSystemService(Context.CameraService)!;
+        foreach (var id in manager.GetCameraIdList()!)
+        {
+            var characteristics = manager.GetCameraCharacteristics(id);
+            if (characteristics.Get(CameraCharacteristics.LensFacing!) is not Java.Lang.Integer facing || facing.IntValue() != (int)LensFacing.Back) continue;
+            var raw = characteristics.Get(CameraCharacteristics.ControlAeAvailableTargetFpsRanges!);
+            if (raw is null) continue;
+            var ranges = global::Android.Runtime.JNIEnv.GetArray<Java.Lang.Object>(raw.Handle);
+            if (ranges is null) continue;
+
+            Java.Lang.Object? best = null;
+            var bestLower = -1;
+            foreach (var item in ranges)
+            {
+                var range = item is null ? null : global::Android.Runtime.Extensions.JavaCast<global::Android.Util.Range>(item);
+                if (range is null) continue;
+                var lower = ((Java.Lang.Integer)range.Lower!).IntValue();
+                var upper = ((Java.Lang.Integer)range.Upper!).IntValue();
+                if (upper is < 24 or > 30 || lower <= bestLower) continue;
+                best = range;
+                bestLower = lower;
+            }
+            return best;
+        }
+        return null;
+    }
+
+    public bool SupportsTorch => _supportsTorch;
+
+    public void SetTorch(bool on)
+    {
+        var control = _camera?.CameraControl;
+        if (control is null || !_supportsTorch) return;
+        MainThread.BeginInvokeOnMainThread(() => control.EnableTorch(on));
+    }
+
+    /// <summary>Rimette a fuoco (e riesponde) al centro: utile quando la nitidezza resta bassa.</summary>
+    public void Refocus()
+    {
+        var control = _camera?.CameraControl;
+        if (control is null) return;
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            try
+            {
+                var factory = new SurfaceOrientedMeteringPointFactory(1f, 1f);
+                var point = factory.CreatePoint(0.5f, 0.5f);
+                var action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FlagAf | FocusMeteringAction.FlagAe)
+                    .DisableAutoCancel()
+                    .Build();
+                control.StartFocusAndMetering(action);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Messa a fuoco non riuscita: {ex.Message}");
+            }
         });
     }
 

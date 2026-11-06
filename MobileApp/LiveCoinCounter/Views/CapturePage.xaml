@@ -67,6 +67,15 @@
                 FontSize="24" TextColor="White" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
                 SemanticProperties.Description="Salva la parte acquisita e ricomincia" />
 
+        <!-- Torcia: con poca luce l'immagine si sfoca (solo durante l'acquisizione, se il telefono ce l'ha) -->
+        <Button Text="{Binding TorchSymbol}"
+                Command="{Binding ToggleTorchCommand}"
+                IsVisible="{Binding CanTorch}"
+                VerticalOptions="End" HorizontalOptions="Start" Margin="28,0,0,38"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="22" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Accendi o spegni la torcia" />
+
         <!-- Importa una foto (solo a riposo) -->
         <Button Text="🖼"
                 Command="{Binding ImportPhotoCommand}"

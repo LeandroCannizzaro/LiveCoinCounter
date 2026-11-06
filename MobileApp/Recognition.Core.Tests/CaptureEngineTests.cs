@@ -85,6 +85,40 @@ public class CaptureEngineTests
     }
 
     [Fact]
+    public async Task Dark_frames_suggest_the_torch()
+    {
+        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite()), new OracleLocator(new SyntheticScene(400, 300)), new MemorySink(), new MosaicCanvas());
+        TrackingUpdate? last = null;
+        engine.TrackingUpdated += u => last = u;
+        engine.Start();
+
+        var dark = new ArgbImage(W, H, Enumerable.Repeat(ImageOps.Argb(8, 8, 8), W * H).ToArray());
+        for (var i = 0; i < 12; i++) await PushAndWaitAsync(engine, new CameraFrame(dark, i, 0), i);
+        await engine.StopAsync();
+
+        Assert.True(last?.Dark);
+        Assert.Contains("torcia", last?.Hint);
+    }
+
+    [Fact]
+    public async Task Persistently_blurry_frames_suggest_moving_away()
+    {
+        var scene = new SyntheticScene(1200, 900, seed: 9);
+        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite()), new OracleLocator(scene), new MemorySink(), new MosaicCanvas(),
+            new CaptureOptions { MinAbsoluteSharpness = 0, FirstKeyframeMinSharpness = 0, BlurryBelow = 1e9 });
+        TrackingUpdate? last = null;
+        engine.TrackingUpdated += u => last = u;
+        engine.Start();
+
+        for (var i = 0; i < 12; i++)
+            await PushAndWaitAsync(engine, new CameraFrame(scene.Render(SyntheticScene.View(500 + i, 450, W, H), W, H), i, 0), i);
+        await engine.StopAsync();
+
+        Assert.True(last?.Blurry);
+        Assert.Contains("sfocata", last?.Hint);
+    }
+
+    [Fact]
     public async Task Blurry_first_frame_does_not_start_the_mosaic()
     {
         var scene = new SyntheticScene(1200, 900, seed: 9);

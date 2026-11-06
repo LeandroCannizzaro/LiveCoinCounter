@@ -27,6 +27,8 @@ public sealed class CaptureViewModel : ObservableObject
     private volatile TrackingUpdate? _lastTracking;
     private volatile bool _coinsChanged;
     private string? _loggedHint;
+    private bool _torchOn;
+    private long _lastRefocusTick;
     private volatile string? _lastError;
     private long _lastErrorTick;
     private CameraFrame? _latestFrame;
@@ -42,7 +44,19 @@ public sealed class CaptureViewModel : ObservableObject
         ImportPhotoCommand = new Command(async () => await ImportPhotoAsync(), () => _state == State.Idle);
         CancelProcessingCommand = new Command(() => _processingCts?.Cancel());
         RestartCommand = new Command(async () => await RestartAsync(), () => _state == State.Capturing);
+        ToggleTorchCommand = new Command(() =>
+        {
+            if (_controller is null) return;
+            _torchOn = !_torchOn;
+            _controller.SetTorch(_torchOn);
+            OnPropertyChanged(nameof(TorchSymbol));
+        });
     }
+
+    /// <summary>Accende e spegne la torcia: con poca luce l'immagine si sfoca e il tracking si perde.</summary>
+    public ICommand ToggleTorchCommand { get; }
+    public bool CanTorch => _state == State.Capturing && _controller?.SupportsTorch == true;
+    public string TorchSymbol => _torchOn ? "🔦" : "🔅";
 
     public ICommand ToggleCommand { get; }
 
@@ -172,6 +186,8 @@ public sealed class CaptureViewModel : ObservableObject
         Hint = null;
         _loggedHint = null;
         _lastError = null;
+        _torchOn = false;
+        OnPropertyChanged(nameof(TorchSymbol));
         while (_changedTiles.TryDequeue(out _)) { }
         if (_view is not null) _view.Source = engine.Canvas;
 
@@ -215,6 +231,13 @@ public sealed class CaptureViewModel : ObservableObject
             _view.FrameQuad = capturing ? update.FrameQuad : null;
             _view.GhostQuad = capturing && update.Status == TrackStatus.Lost ? update.LastKnownQuad : null;
             Hint = update.Hint ?? (update.PendingDetections > 3 ? "Analisi in corso: rallenta un po'" : null);
+
+            // immagini sfocate con luce sufficiente: prova a rimettere a fuoco (al massimo ogni 5 secondi)
+            if (capturing && update.Blurry && !update.Dark && Environment.TickCount64 - _lastRefocusTick > 5000)
+            {
+                _lastRefocusTick = Environment.TickCount64;
+                _controller.Refocus();
+            }
         }
 
         // un errore del motore si vede per qualche secondo, invece di lasciare la schermata ferma senza spiegazioni
@@ -383,6 +406,7 @@ public sealed class CaptureViewModel : ObservableObject
         ((Command)ImportPhotoCommand).ChangeCanExecute();
         ((Command)RestartCommand).ChangeCanExecute();
         OnPropertyChanged(nameof(CanRestart));
+        OnPropertyChanged(nameof(CanTorch));
         var fullScreen = state is not State.Idle;
         if (fullScreen != wasFullScreen) FullScreenChanged?.Invoke(fullScreen);
     }

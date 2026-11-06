@@ -33,6 +33,22 @@ public sealed class CaptureController
     /// <summary>L'ultimo fotogramma arrivato dalla fotocamera (per l'anteprima).</summary>
     public CameraFrame? LatestFrame { get; private set; }
 
+    /// <summary>La fotocamera in uso ha la torcia (solo CameraX; ARCore la gestisce da sé).</summary>
+    public bool SupportsTorch => _source?.SupportsTorch == true;
+
+    public void SetTorch(bool on)
+    {
+        _source?.SetTorch(on);
+        _log.Event("torch", new { on }, important: true);
+    }
+
+    /// <summary>Rimette a fuoco al centro; chi chiama limita la frequenza.</summary>
+    public void Refocus()
+    {
+        _source?.Refocus();
+        _log.Event("refocus");
+    }
+
     /// <summary>Avviso sul metodo effettivamente usato (es. ARCore non supportato).</summary>
     public string? Note { get; }
 
