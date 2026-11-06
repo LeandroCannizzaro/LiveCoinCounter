@@ -33,6 +33,44 @@ public class CoinRegistryTests
     }
 
     [Fact]
+    public void A_shifted_and_rotated_keyframe_is_aligned_before_matching()
+    {
+        // 8 monete note; il secondo fotogramma chiave le vede ruotate di 8° e spostate di (35, 25): oltre la soglia di abbinamento
+        // diretto, ma tutte allineabili con una sola trasformazione. In più c'è una moneta davvero nuova, lontana.
+        var registry = new CoinRegistry();
+        var points = new List<(float X, float Y, int Cents)>();
+        for (var i = 0; i < 8; i++) points.Add((100 + (i % 4) * 110, 100 + (i / 4) * 130, i % 2 == 0 ? 1 : 2));
+        registry.ObserveKeyframe(points.Select(p => new CoinObservation(default, new RectF(p.X - 20, p.Y - 20, 40, 40), 0.9f, 1, 0, p.Cents, 0.9f)).ToList());
+        Assert.Equal(8, registry.Count);
+
+        const double angle = 8 * Math.PI / 180;
+        (float X, float Y) Move(float x, float y)
+        {
+            double dx = x - 250, dy = y - 165;
+            return ((float)(250 + dx * Math.Cos(angle) - dy * Math.Sin(angle) + 35), (float)(165 + dx * Math.Sin(angle) + dy * Math.Cos(angle) + 25));
+        }
+        var second = points.Select(p => { var m = Move(p.X, p.Y); return new CoinObservation(default, new RectF(m.X - 20, m.Y - 20, 40, 40), 0.9f, 1, 1, p.Cents, 0.9f); }).ToList();
+        second.Add(new CoinObservation(default, new RectF(580, 380, 40, 40), 0.9f, 1, 1, 5, 0.9f));
+        var updates = registry.ObserveKeyframe(second);
+
+        Assert.Equal(9, registry.Count);
+        Assert.Equal(8, updates.Count(u => !u.IsNew));
+        Assert.True(updates[^1].IsNew);
+    }
+
+    [Fact]
+    public void Two_coins_of_a_keyframe_never_share_a_track_when_aligning()
+    {
+        var registry = new CoinRegistry();
+        var kf0 = new[] { (100f, 100f), (210f, 100f), (320f, 100f), (100f, 230f), (210f, 230f), (320f, 230f) };
+        registry.ObserveKeyframe(kf0.Select(p => new CoinObservation(default, new RectF(p.Item1 - 20, p.Item2 - 20, 40, 40), 0.9f, 1, 0)).ToList());
+        var updates = registry.ObserveKeyframe(kf0.Select(p => new CoinObservation(default, new RectF(p.Item1 - 18, p.Item2 - 17, 40, 40), 0.9f, 1, 1)).ToList());
+
+        Assert.Equal(6, registry.Count);
+        Assert.Equal(6, updates.Select(u => u.Track.Id).Distinct().Count());
+    }
+
+    [Fact]
     public void Coins_in_the_same_keyframe_are_never_merged_even_if_overlapping()
     {
         var registry = new CoinRegistry();

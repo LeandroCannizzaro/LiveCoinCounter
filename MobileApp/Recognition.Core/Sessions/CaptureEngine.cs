@@ -445,6 +445,8 @@ public sealed class CaptureEngine
         var changes = new List<CoinChange>();
         var logged = _log.Enabled ? new List<object>() : null;
 
+        // prima i riquadri utilizzabili, poi l'abbinamento alle monete note, per tutto il fotogramma insieme
+        var usable = new List<(CoinBox Coin, RectF MosaicBox, float Quality)>();
         foreach (var coin in boxes)
         {
             if (!DetectionFilter.IsUsable(coin.Box, image.Width, image.Height))
@@ -452,10 +454,16 @@ public sealed class CaptureEngine
                 logged?.Add(new { box = DiagData.Box(coin.Box), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents, use = DetectionFilter.Reason(coin.Box, image.Width, image.Height) });
                 continue;
             }
-            var mosaicBox = keyframe.FrameToMosaic.MapBox(coin.Box);
-            var quality = DetectionFilter.Centrality(coin.Box, image.Width, image.Height) * keyframe.Quality;
-            var update = Coins.Observe(new CoinObservation(coin.Box, mosaicBox, coin.Confidence, quality, keyframe.Index,
-                coin.Cents, coin.ClassConfidence));
+            usable.Add((coin, keyframe.FrameToMosaic.MapBox(coin.Box),
+                DetectionFilter.Centrality(coin.Box, image.Width, image.Height) * keyframe.Quality));
+        }
+        var updates = Coins.ObserveKeyframe(usable.Select(u => new CoinObservation(u.Coin.Box, u.MosaicBox, u.Coin.Confidence, u.Quality,
+            keyframe.Index, u.Coin.Cents, u.Coin.ClassConfidence)).ToList());
+
+        for (var k = 0; k < usable.Count; k++)
+        {
+            var (coin, mosaicBox, quality) = usable[k];
+            var update = updates[k];
             var crop = update.IsBetter ? ImageOps.CropSquare(image, coin.Box, _options.CropSize) : null;
             var color = crop is not null ? CoinColorAnalysis.Analyze(crop) : null;
             changes.Add(new CoinChange(update.Track, update.IsNew, crop, color));
