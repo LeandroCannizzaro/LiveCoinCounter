@@ -51,6 +51,20 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
         });
         // il riepilogo della sessione a scatti sta sotto questa pagina
         DoneCommand = new Command(async () => await Shell.Current.GoToAsync(".."));
+        RetakeCommand = new Command(async () =>
+        {
+            if (_session is { SeriesId: not null } shot) await SessionActions.RetakeShotAsync(shot);
+        });
+        DeleteShotCommand = new Command(async () =>
+        {
+            if (_session is not { SeriesId: not null } shot) return;
+            var left = await SessionActions.DeleteShotAsync(shot);
+            if (left is null) return;
+            // l'ultimo scatto: la sessione non c'è più, si torna all'elenco (sotto c'era il suo riepilogo)
+            if (left == 0) { await Shell.Current.GoToAsync("../.."); return; }
+            Select(null);
+            await LoadAsync();
+        });
     }
 
     public ICommand CloseCommand { get; }
@@ -68,6 +82,12 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
     public ICommand AnotherShotCommand { get; }
 
     public ICommand DoneCommand { get; }
+
+    /// <summary>Rifà lo scatto mostrato: il nuovo prende il suo posto (il vecchio resta se si esce senza scattare).</summary>
+    public ICommand RetakeCommand { get; }
+
+    /// <summary>Elimina lo scatto mostrato.</summary>
+    public ICommand DeleteShotCommand { get; }
 
     public ImageSource? Image
     {
@@ -118,7 +138,7 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
     };
 
     /// <summary>Il pannello dei dettagli sta sopra la barra di navigazione della serie.</summary>
-    public Thickness DetailMargin => IsSeries ? new Thickness(12, 0, 12, 132) : new Thickness(12, 0, 12, 24);
+    public Thickness DetailMargin => IsSeries ? new Thickness(12, 0, 12, 184) : new Thickness(12, 0, 12, 24);
 
     /// <summary>
     /// Tocco sulla superficie, in coordinate della vista senza zoom (riquadro di <paramref name="viewWidth"/> × <paramref name="viewHeight"/>).

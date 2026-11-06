@@ -36,6 +36,32 @@ internal static class SessionActions
 
     public static Task ExportAsync(SessionRecord session) => SessionStorage.ExportAsync(session);
 
+    /// <summary>Rifà uno scatto di una sessione a scatti: si apre l'inquadratura; il nuovo scatto prende il posto del vecchio.</summary>
+    public static async Task RetakeShotAsync(SessionRecord shot)
+    {
+        if (shot.SeriesId is not { } series) return;
+        CaptureViewModel.PendingShotSeries = series;
+        CaptureViewModel.PendingRetakeShot = shot.Id;
+        await Shell.Current.GoToAsync("//CapturePage");
+    }
+
+    /// <summary>
+    /// Elimina uno scatto (dopo conferma): le sue monete escono dal totale, gli altri scatti si rinumerano. Se era l'unico si elimina
+    /// la sessione. Restituisce null se l'utente ha annullato, altrimenti quanti scatti restano.
+    /// </summary>
+    public static async Task<int?> DeleteShotAsync(SessionRecord shot)
+    {
+        var page = Shell.Current?.CurrentPage;
+        if (page is null || shot.SeriesId is not { } series) return null;
+        var left = (await SessionServices.Repository.ListShotsAsync(series)).Count - 1;
+        var message = left == 0
+            ? $"È l'unico scatto: si elimina tutta la sessione ({shot.CoinCount} monete)."
+            : $"Le sue {shot.CoinCount} monete ({Format(shot.TotalCents)}) escono dal totale; gli altri scatti si rinumerano.";
+        if (!await page.DisplayAlertAsync($"Eliminare lo scatto {shot.ShotIndex}?", message, "Elimina", "Annulla")) return null;
+        await SessionServices.DeleteShotAsync(shot.Id, series);
+        return left;
+    }
+
     /// <summary>Lo stato di una moneta com'è ora, in forma adatta al registro.</summary>
     public static object Snapshot(CoinRecord c) => new
     {
@@ -181,6 +207,18 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
             CaptureViewModel.PendingShotSeries = _sessionId;
             await Shell.Current.GoToAsync("//CapturePage");
         });
+        RetakeShotCommand = new Command(async () =>
+        {
+            if (IsShots) await SessionActions.RetakeShotAsync(_shots[_shot]);
+        });
+        DeleteShotCommand = new Command(async () =>
+        {
+            if (!IsShots) return;
+            var left = await SessionActions.DeleteShotAsync(_shots[_shot]);
+            if (left is null) return;
+            if (left == 0) { await Shell.Current.GoToAsync(".."); return; }
+            await LoadAsync();
+        });
         AllCorrectCommand = new Command(async () => await AllCorrectAsync(), () => !IsBusy);
         NoteCommand = new Command(async () => await EditNoteAsync());
         ShowCoinsCommand = new Command(async () => await OpenCoinsAsync(false));
@@ -204,6 +242,12 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
     /// <summary>Sessione a scatti: un altro scatto, su un'altra parte del tavolo.</summary>
     public ICommand AnotherShotCommand { get; }
+
+    /// <summary>Sessione a scatti: rifà lo scatto mostrato (il nuovo prende il suo posto).</summary>
+    public ICommand RetakeShotCommand { get; }
+
+    /// <summary>Sessione a scatti: elimina lo scatto mostrato.</summary>
+    public ICommand DeleteShotCommand { get; }
 
     /// <summary>Una sessione a scatti: le monete sono la somma degli scatti, una superficie per scatto.</summary>
     public bool IsShots => _shots.Count > 0;
@@ -366,6 +410,7 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
         if (query.TryGetValue("id", out var id)) _sessionId = Uri.UnescapeDataString(id.ToString() ?? string.Empty);
+        if (query.TryGetValue("shot", out var shot) && int.TryParse(shot.ToString(), out var s)) _shot = s;
     }
 
     public async Task LoadAsync()
@@ -375,7 +420,7 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
         if (_session is null) return;
         _coins = await SessionServices.Repository.ListCoinsAsync(_sessionId);
         _shots = await SessionServices.Repository.ListShotsAsync(_sessionId);
-        if (_shot >= _shots.Count) _shot = Math.Max(0, _shots.Count - 1);
+        if (_shot >= _shots.Count || _shot < 0) _shot = Math.Max(0, _shots.Count - 1);
         NotifyShots();
 
         Denominations = _coins.Where(c => c.EffectiveCents is not null)

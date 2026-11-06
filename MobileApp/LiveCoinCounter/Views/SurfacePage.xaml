@@ -52,6 +52,15 @@
                 StrokeShape="RoundRectangle 16" BackgroundColor="#CC1A1A1E">
             <VerticalStackLayout Spacing="8">
                 <Label Text="{Binding SeriesTotalText}" TextColor="#DDFFFFFF" FontSize="12" HorizontalTextAlignment="Center" />
+                <!-- lo scatto mostrato: rifarlo o eliminarlo -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <Button Text="↻ Rifai scatto" Command="{Binding RetakeCommand}" HeightRequest="40" CornerRadius="20" Padding="8,0"
+                            FontSize="13" TextColor="White" BackgroundColor="#44FFFFFF"
+                            SemanticProperties.Description="Rifai questo scatto: il nuovo prende il suo posto" />
+                    <Button Grid.Column="1" Text="🗑 Elimina scatto" Command="{Binding DeleteShotCommand}" HeightRequest="40" CornerRadius="20" Padding="8,0"
+                            FontSize="13" TextColor="#FFB4A9" BackgroundColor="#44FFFFFF"
+                            SemanticProperties.Description="Elimina questo scatto: le sue monete escono dal totale" />
+                </Grid>
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
                     <Button Text="◀" Command="{Binding PreviousCommand}" WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="0"
                             FontSize="18"

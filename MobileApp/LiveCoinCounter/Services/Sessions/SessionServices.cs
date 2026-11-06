@@ -107,8 +107,21 @@ public static class SessionServices
     public static async Task DeleteShotAsync(string shotId, string seriesId)
     {
         await DeleteSessionAsync(shotId);
-        if ((await Repository.ListShotsAsync(seriesId)).Count == 0) await DeleteSessionAsync(seriesId);
-        else await Repository.RefreshTotalsAsync(seriesId);
+        var shots = await Repository.ListShotsAsync(seriesId);
+        if (shots.Count == 0)
+        {
+            await DeleteSessionAsync(seriesId);
+            return;
+        }
+        // gli scatti rimasti si rinumerano 1..n
+        for (var i = 0; i < shots.Count; i++)
+        {
+            if (shots[i].ShotIndex == i + 1) continue;
+            shots[i].ShotIndex = i + 1;
+            shots[i].Name = $"Scatto {i + 1}";
+            await Repository.UpdateSessionAsync(shots[i]);
+        }
+        await UpdateShotSessionAsync(seriesId);
     }
 
     /// <summary>

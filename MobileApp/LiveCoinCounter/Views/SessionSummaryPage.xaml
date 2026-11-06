@@ -168,6 +168,15 @@
                 <Image x:Name="SurfaceImage" Source="{Binding MosaicImage}" Aspect="AspectFit" />
             </Border>
 
+            <!-- lo scatto mostrato: rifarlo o eliminarlo; oppure aggiungerne un altro -->
+            <Grid IsVisible="{Binding IsShots}" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Text="↻ Rifai scatto" Command="{Binding RetakeShotCommand}" CornerRadius="12" FontSize="13"
+                        BackgroundColor="Transparent" BorderWidth="1" BorderColor="{StaticResource Primary}" TextColor="{StaticResource Primary}"
+                        SemanticProperties.Description="Rifai lo scatto mostrato: il nuovo prende il suo posto" />
+                <Button Grid.Column="1" Text="🗑 Elimina scatto" Command="{Binding DeleteShotCommand}" CornerRadius="12" FontSize="13"
+                        BackgroundColor="Transparent" BorderWidth="1" BorderColor="#E53935" TextColor="#E53935"
+                        SemanticProperties.Description="Elimina lo scatto mostrato: le sue monete escono dal totale" />
+            </Grid>
             <Button IsVisible="{Binding IsShots}" Text="📷 Altro scatto" Command="{Binding AnotherShotCommand}" CornerRadius="12"
                     SemanticProperties.Description="Aggiungi a questa sessione uno scatto su un'altra parte del tavolo" />
 

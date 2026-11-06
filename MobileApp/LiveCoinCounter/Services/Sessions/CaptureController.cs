@@ -55,7 +55,8 @@ public sealed class CaptureController
 
     /// <param name="seriesId">Scatto: la sessione a scatti a cui aggiungere questo scatto, creata al primo (null per l'acquisizione continua).</param>
     /// <param name="paused">Il motore parte in pausa (si inquadra; lo scatto lo fa partire).</param>
-    public static async Task<CaptureController> StartLiveAsync(string? seriesId = null, bool paused = false)
+    /// <param name="shotIndex">Scatto rifatto: il numero dello scatto che sostituirà (altrimenti il successivo all'ultimo).</param>
+    public static async Task<CaptureController> StartLiveAsync(string? seriesId = null, bool paused = false, int? shotIndex = null)
     {
         var setup = SessionServices.CreateCaptureSetup(SettingsService.CaptureMethod);
         var locator = SessionServices.CreateLocator();
@@ -65,7 +66,7 @@ public sealed class CaptureController
         if (seriesId is not null)
         {
             await repository.EnsureShotSessionAsync(seriesId, setup.Tracker.Id, locator.Id, SettingsService.Retention, DateTime.Now);
-            var shot = (await repository.ListShotsAsync(seriesId)).Count + 1;
+            var shot = shotIndex ?? (await repository.ListShotsAsync(seriesId)).Count + 1;
             session.SeriesId = seriesId;
             session.ShotIndex = shot;
             session.Name = $"Scatto {shot}";

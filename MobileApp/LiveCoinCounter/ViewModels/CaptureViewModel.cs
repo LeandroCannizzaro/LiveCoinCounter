@@ -135,6 +135,14 @@ public sealed class CaptureViewModel : ObservableObject
     /// stessa serie.
     /// </summary>
     public static string? PendingShotSeries { get; set; }
+
+    /// <summary>
+    /// Insieme a <see cref="PendingShotSeries"/>: lo scatto da rifare. Il nuovo prende il suo numero; il vecchio si elimina solo quando
+    /// il nuovo è pronto (se si esce senza scattare resta).
+    /// </summary>
+    public static string? PendingRetakeShot { get; set; }
+
+    private string? _retakeShot;
     public ICommand CancelProcessingCommand { get; }
 
     /// <summary>Il pulsante alterna i simboli start e stop.</summary>
@@ -200,7 +208,9 @@ public sealed class CaptureViewModel : ObservableObject
         if (PendingShotSeries is { } series && _state == State.Idle)
         {
             PendingShotSeries = null;
-            await EnterShotModeAsync(series);
+            var retake = PendingRetakeShot;
+            PendingRetakeShot = null;
+            await EnterShotModeAsync(series, retake);
             return;
         }
         if (_checkedInterrupted || _state != State.Idle) return;
@@ -255,18 +265,27 @@ public sealed class CaptureViewModel : ObservableObject
     /// Scatto: si apre la telecamera a tutto schermo per inquadrare (il motore è in pausa: niente mosaico finché non si scatta).
     /// Ogni scatto è una sessione della serie <paramref name="seriesId"/>; gli scatti di una serie si vedono poi come pila di superfici.
     /// </summary>
-    private async Task EnterShotModeAsync(string seriesId)
+    private async Task EnterShotModeAsync(string seriesId, string? retakeShotId = null)
     {
         if (_state != State.Idle) return;
         _shotSeries = seriesId;
+        _retakeShot = null;
+        int? shotIndex = null;
+        if (retakeShotId is not null && await SessionServices.Repository.GetSessionAsync(retakeShotId) is { } old)
+        {
+            _retakeShot = old.Id;
+            shotIndex = old.ShotIndex;
+        }
         SetShotState(preview: true, running: false);
-        await StartAsync(seriesId, paused: true);
+        await StartAsync(seriesId, paused: true, shotIndex);
         if (_state != State.Capturing || _controller is null)
         {
             SetShotState(preview: false, running: false);
             return;
         }
-        StatusText = $"Scatto {_controller.Session.ShotIndex}: inquadra le monete e premi ◉";
+        StatusText = _retakeShot is null
+            ? $"Scatto {_controller.Session.ShotIndex}: inquadra le monete e premi ◉"
+            : $"Rifai lo scatto {_controller.Session.ShotIndex}: inquadra le monete e premi ◉";
     }
 
     /// <summary>
@@ -296,6 +315,7 @@ public sealed class CaptureViewModel : ObservableObject
     {
         if (_controller is not { } controller || _shotRunning) return;
         SetShotState(preview: false, running: false);
+        _retakeShot = null;     // lo scatto da rifare resta com'era
         _controller = null;
         _lastTracking = null;
         Hint = null;
@@ -323,7 +343,7 @@ public sealed class CaptureViewModel : ObservableObject
         else if (_state == State.Capturing) await StopAsync();
     }
 
-    private async Task StartAsync(string? seriesId = null, bool paused = false)
+    private async Task StartAsync(string? seriesId = null, bool paused = false, int? shotIndex = null)
     {
         var permission = await Permissions.RequestAsync<Permissions.Camera>();
         if (permission != PermissionStatus.Granted)
@@ -337,7 +357,7 @@ public sealed class CaptureViewModel : ObservableObject
         _view?.Clear();
         try
         {
-            _controller = await CaptureController.StartLiveAsync(seriesId, paused);
+            _controller = await CaptureController.StartLiveAsync(seriesId, paused, shotIndex);
             AttachEngine(_controller);
             SetState(State.Capturing);
             StatusText = _controller.Note ?? "Muovi lentamente il telefono, parallelo al tavolo";
@@ -693,10 +713,15 @@ public sealed class CaptureViewModel : ObservableObject
 
         if (openSeries is not null)
         {
-            // lo scatto si somma alla sessione a scatti: si apre il suo riepilogo e sopra la pila delle superfici, sull'ultimo scatto
+            // scatto rifatto: il nuovo è pronto, il vecchio si elimina
+            if (_retakeShot is { } old && old != sessionId) await SessionServices.DeleteSessionAsync(old);
+            _retakeShot = null;
+            // lo scatto si somma alla sessione a scatti: si apre il suo riepilogo e sopra la pila delle superfici, su questo scatto
             await SessionServices.UpdateShotSessionAsync(openSeries);
-            await Shell.Current.GoToAsync($"session?id={Uri.EscapeDataString(openSeries)}", false);
-            await Shell.Current.GoToAsync($"surface?series={Uri.EscapeDataString(openSeries)}");
+            var index = Math.Max(0, (await SessionServices.Repository.ListShotsAsync(openSeries)).FindIndex(s => s.Id == sessionId));
+            var id = Uri.EscapeDataString(openSeries);
+            await Shell.Current.GoToAsync($"session?id={id}&shot={index}", false);
+            await Shell.Current.GoToAsync($"surface?series={id}&index={index}");
         }
         else
             await Shell.Current.GoToAsync($"session?id={Uri.EscapeDataString(sessionId)}");
