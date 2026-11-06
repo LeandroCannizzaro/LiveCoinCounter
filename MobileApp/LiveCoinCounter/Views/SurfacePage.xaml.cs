@@ -6,10 +6,14 @@ namespace LiveCoinCounter.Views;
 public partial class SurfacePage : ContentPage
 {
     private const double MaxZoom = 12;
+    private const int DoubleTapMs = 300;
 
     private readonly SurfaceViewModel _viewModel = new();
     private double _scale = 1, _startScale = 1;
     private double _offsetX, _offsetY;
+    private CancellationTokenSource? _pendingTap;
+    private long _lastTapTick;
+    private Point _lastTapPoint;
 
     public SurfacePage()
     {
@@ -71,7 +75,7 @@ public partial class SurfacePage : ContentPage
     }
 
     /// <summary>Doppio tocco: se è intera ingrandisce 3× sul punto toccato, altrimenti torna intera.</summary>
-    private void OnDoubleTapped(object? sender, TappedEventArgs e)
+    private void OnDoubleTap(Point point)
     {
         if (_scale > 1)
         {
@@ -80,7 +84,6 @@ public partial class SurfacePage : ContentPage
         else
         {
             const double zoom = 3;
-            var point = e.GetPosition(Stage) ?? new Point(Stage.Width / 2, Stage.Height / 2);
             Surface.AnchorX = 0;
             Surface.AnchorY = 0;
             Apply(zoom, -point.X * (zoom - 1), -point.Y * (zoom - 1));
@@ -90,12 +93,46 @@ public partial class SurfacePage : ContentPage
         _offsetY = Surface.TranslationY;
     }
 
-    /// <summary>Tocco singolo: con i riquadri spenti mostra o nasconde la moneta toccata (si risale al punto senza zoom).</summary>
-    private void OnSingleTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// Un solo riconoscitore di tocchi: su Android due riconoscitori (singolo e doppio) sulla stessa vista fanno perdere il singolo.
+    /// Il doppio tocco si riconosce qui dal tempo e dalla distanza tra due tocchi; il singolo scatta se non ne segue un secondo.
+    /// </summary>
+    private void OnTapped(object? sender, TappedEventArgs e)
     {
-        var p = e.GetPosition(Stage);
-        if (p is null || Surface.Width <= 0) return;
-        _viewModel.TapAt((p.Value.X - Surface.TranslationX) / _scale, (p.Value.Y - Surface.TranslationY) / _scale, Surface.Width, Surface.Height);
+        var p = e.GetPosition(Stage) ?? new Point(Stage.Width / 2, Stage.Height / 2);
+        var now = Environment.TickCount64;
+        if (_pendingTap is { } pending && now - _lastTapTick < DoubleTapMs &&
+            Math.Abs(p.X - _lastTapPoint.X) < 80 && Math.Abs(p.Y - _lastTapPoint.Y) < 80)
+        {
+            pending.Cancel();
+            _pendingTap = null;
+            OnDoubleTap(p);
+            return;
+        }
+
+        _pendingTap?.Cancel();
+        var cts = new CancellationTokenSource();
+        _pendingTap = cts;
+        _lastTapTick = now;
+        _lastTapPoint = p;
+        _ = Task.Run(async () =>
+        {
+            try { await Task.Delay(DoubleTapMs, cts.Token); }
+            catch (OperationCanceledException) { return; }
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                if (!ReferenceEquals(_pendingTap, cts)) return;
+                _pendingTap = null;
+                OnSingleTap(p);
+            });
+        });
+    }
+
+    /// <summary>Tocco singolo: con i riquadri spenti mostra o nasconde la moneta toccata (si risale al punto senza zoom).</summary>
+    private void OnSingleTap(Point p)
+    {
+        if (Surface.Width <= 0) return;
+        _viewModel.TapAt((p.X - Surface.TranslationX) / _scale, (p.Y - Surface.TranslationY) / _scale, Surface.Width, Surface.Height);
     }
 
     /// <summary>Applica zoom e spostamento tenendo l'immagine dentro lo schermo (niente bordi vuoti a sinistra o in alto).</summary>

@@ -144,8 +144,7 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
             lines.Add($"Colore: {(c.ColorTint == "copper" ? "rame" : "oro")} (tinta {c.ColorHue:0}°, saturazione {c.ColorSat:P0})");
         if (!string.IsNullOrWhiteSpace(c.Note)) lines.Add($"Nota: {c.Note}");
         if (!string.IsNullOrEmpty(c.ClassifierId)) lines.Add($"Classificatore: {c.ClassifierId}");
-        return string.Join("
-", lines);
+        return string.Join(Environment.NewLine, lines);
     }
 
     public bool CanGrid => _scale is not null;

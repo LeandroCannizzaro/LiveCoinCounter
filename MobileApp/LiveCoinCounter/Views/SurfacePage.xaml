@@ -15,8 +15,7 @@
             <Grid.GestureRecognizers>
                 <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
                 <PanGestureRecognizer PanUpdated="OnPanUpdated" />
-                <TapGestureRecognizer NumberOfTapsRequired="2" Tapped="OnDoubleTapped" />
-                <TapGestureRecognizer NumberOfTapsRequired="1" Tapped="OnSingleTapped" />
+                <TapGestureRecognizer Tapped="OnTapped" />
             </Grid.GestureRecognizers>
             <Image x:Name="Surface" Source="{Binding Image}" Aspect="AspectFit" />
         </Grid>
