@@ -59,6 +59,21 @@ public class MarkerRegistryTests
     }
 
     [Fact]
+    public void The_same_id_twice_in_a_frame_is_two_physical_markers()
+    {
+        var registry = new MarkerRegistry();
+        // due marker con ID 41 nello stesso fotogramma, lontani: due marker fisici (il foglio stampato due volte)
+        registry.ObserveFrame(new[] { Square(41, 100, 100, 70), Square(41, 600, 400, 70), Square(4, 300, 300, 70) }, Homography.Identity);
+        Assert.Equal(3, registry.Count);
+
+        // più tardi se ne vede uno solo, spostato di molto dal drift del mosaico: va al più vicino, non ne nasce un terzo
+        registry.ObserveFrame(new[] { Square(41, 640, 440, 70) }, Homography.Identity);
+        Assert.Equal(3, registry.Count);
+        Assert.Equal(2, registry.Landmarks.Count(l => l.Id == 41));
+        Assert.Equal(2, registry.Landmarks.Single(l => l.Id == 41 && l.X > 400).Observations);
+    }
+
+    [Fact]
     public void Ids_outside_the_printed_sheet_are_ignored()
     {
         var registry = new MarkerRegistry();

@@ -35,35 +35,73 @@ public sealed class MarkerRegistry
 
     private sealed class Entry
     {
+        public int Id;
         public double SumX, SumY, SumScale;
         public int Count;
         public int Rejected;
+        public double X => SumX / Count;
+        public double Y => SumY / Count;
     }
 
-    private readonly Dictionary<int, Entry> _entries = new();
+    // un marker fisico = una voce; lo stesso ID può comparire più volte (il foglio stampato due volte, marker ritagliati dallo stesso numero)
+    private readonly List<Entry> _entries = new();
     private readonly object _sync = new();
 
-    /// <summary>Il marker visto nel fotogramma, riportato sul mosaico con l'omografia del fotogramma. Falso se l'avvistamento non è plausibile.</summary>
-    public bool Observe(MarkerDetection marker, Homography frameToMosaic, double imageToFrameScale = 1)
+    /// <summary>Un solo marker visto nel fotogramma (vedi <see cref="ObserveFrame"/>).</summary>
+    public bool Observe(MarkerDetection marker, Homography frameToMosaic, double imageToFrameScale = 1) =>
+        ObserveFrame(new[] { marker }, frameToMosaic, imageToFrameScale)[0];
+
+    /// <summary>
+    /// I marker visti in un fotogramma, riportati sul mosaico con l'omografia del fotogramma; per ognuno dice se l'avvistamento è
+    /// plausibile e registrato. Due marker con lo stesso ID nello stesso fotogramma sono due marker fisici diversi: si tengono separati;
+    /// un ID visto da solo va al marker con quell'ID più vicino (il mosaico può essersi spostato di centinaia di pixel).
+    /// </summary>
+    public IReadOnlyList<bool> ObserveFrame(IReadOnlyList<MarkerDetection> markers, Homography frameToMosaic, double imageToFrameScale = 1)
     {
-        if (marker.Id is < 0 or > MarkerSpec.MaxId) return false;
-        if (!TryMeasure(marker.Corners, frameToMosaic, imageToFrameScale, out var centre, out var pxPerMm)) return false;
+        var result = new bool[markers.Count];
+        var measured = new (PointD Centre, double Scale)?[markers.Count];
+        for (var i = 0; i < markers.Count; i++)
+            if (markers[i].Id is >= 0 and <= MarkerSpec.MaxId && TryMeasure(markers[i].Corners, frameToMosaic, imageToFrameScale, out var c, out var s))
+                measured[i] = (c, s);
 
         lock (_sync)
         {
-            if (!_entries.TryGetValue(marker.Id, out var e)) _entries[marker.Id] = e = new Entry();
-            if (e.Count >= 3 && Math.Abs(pxPerMm / (e.SumScale / e.Count) - 1) > MaxScaleDeviation)
+            foreach (var group in Enumerable.Range(0, markers.Count).Where(i => measured[i] is not null).GroupBy(i => markers[i].Id))
             {
-                e.Rejected++;
-                return false;
+                var candidates = _entries.Where(e => e.Id == group.Key && e.Count > 0).ToList();
+                var taken = new HashSet<Entry>();
+                // le coppie più vicine per prime: ogni marker già noto prende al più un avvistamento per fotogramma
+                var pairs = group.SelectMany(i => candidates.Select(e => (I: i, E: e, D: Dist(measured[i]!.Value.Centre, e))))
+                    .OrderBy(p => p.D).ToList();
+                var assigned = new Dictionary<int, Entry>();
+                foreach (var p in pairs)
+                    if (!assigned.ContainsKey(p.I) && !taken.Contains(p.E)) { assigned[p.I] = p.E; taken.Add(p.E); }
+
+                foreach (var i in group)
+                {
+                    var (centre, scale) = measured[i]!.Value;
+                    if (!assigned.TryGetValue(i, out var entry))
+                    {
+                        entry = new Entry { Id = group.Key };
+                        _entries.Add(entry);
+                    }
+                    if (entry.Count >= 3 && Math.Abs(scale / (entry.SumScale / entry.Count) - 1) > MaxScaleDeviation)
+                    {
+                        entry.Rejected++;
+                        continue;
+                    }
+                    entry.SumX += centre.X;
+                    entry.SumY += centre.Y;
+                    entry.SumScale += scale;
+                    entry.Count++;
+                    result[i] = true;
+                }
             }
-            e.SumX += centre.X;
-            e.SumY += centre.Y;
-            e.SumScale += pxPerMm;
-            e.Count++;
-            return true;
         }
+        return result;
     }
+
+    private static double Dist(PointD p, Entry e) => Math.Sqrt((p.X - e.X) * (p.X - e.X) + (p.Y - e.Y) * (p.Y - e.Y));
 
     /// <summary>
     /// Posizione sul mosaico e scala (pixel del mosaico per millimetro) di un marker visto con gli angoli dati.
@@ -93,14 +131,14 @@ public sealed class MarkerRegistry
         get
         {
             lock (_sync)
-                return _entries.Where(kv => kv.Value.Count > 0)
-                    .Select(kv => new MarkerLandmark(kv.Key, kv.Value.SumX / kv.Value.Count, kv.Value.SumY / kv.Value.Count,
-                        kv.Value.SumScale / kv.Value.Count, kv.Value.Count))
-                    .OrderBy(m => m.Id).ToList();
+                return _entries.Where(e => e.Count > 0)
+                    .Select(e => new MarkerLandmark(e.Id, e.SumX / e.Count, e.SumY / e.Count, e.SumScale / e.Count, e.Count))
+                    .OrderBy(m => m.Id).ThenBy(m => m.X).ToList();
         }
     }
 
-    public int Count { get { lock (_sync) return _entries.Count(kv => kv.Value.Count > 0); } }
+    /// <summary>I marker fisici visti (un ID stampato due volte e messo in due posti conta due).</summary>
+    public int Count { get { lock (_sync) return _entries.Count(e => e.Count > 0); } }
 
     /// <summary>Scala mediana dei marker visti (pixel del mosaico per millimetro), o null se non ce n'è nessuno.</summary>
     public double? MedianPxPerMm => MedianOf(Landmarks);
@@ -117,7 +155,7 @@ public sealed class MarkerRegistry
     {
         lock (_sync)
             foreach (var l in landmarks)
-                _entries[l.Id] = new Entry { SumX = l.X * l.Observations, SumY = l.Y * l.Observations, SumScale = l.PxPerMm * l.Observations, Count = l.Observations };
+                _entries.Add(new Entry { Id = l.Id, SumX = l.X * l.Observations, SumY = l.Y * l.Observations, SumScale = l.PxPerMm * l.Observations, Count = l.Observations });
     }
 }
 

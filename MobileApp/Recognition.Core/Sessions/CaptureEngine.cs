@@ -271,11 +271,11 @@ public sealed class CaptureEngine
             if (found.Count == 0) return;
 
             var seen = new List<object>();
-            foreach (var marker in found)
+            var accepted = Markers.ObserveFrame(found, h, 1.0 / scale);
+            for (var i = 0; i < found.Count; i++)
             {
-                var accepted = Markers.Observe(marker, h, 1.0 / scale);
-                MarkerRegistry.TryMeasure(marker.Corners, h, 1.0 / scale, out _, out var pxPerMm);
-                seen.Add(new { id = marker.Id, pxPerMm = DiagData.R(pxPerMm, 3), accepted });
+                MarkerRegistry.TryMeasure(found[i].Corners, h, 1.0 / scale, out var centre, out var pxPerMm);
+                seen.Add(new { id = found[i].Id, pxPerMm = DiagData.R(pxPerMm, 3), x = DiagData.R(centre.X, 0), y = DiagData.R(centre.Y, 0), accepted = accepted[i] });
             }
             _log.Event("markers", new { frame = _framesSeen, ms = DiagData.R(timer.Elapsed.TotalMilliseconds), seen, total = Markers.Count });
         }

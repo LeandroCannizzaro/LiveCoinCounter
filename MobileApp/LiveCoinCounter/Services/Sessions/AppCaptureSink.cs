@@ -100,7 +100,8 @@ public sealed class AppCaptureSink : ICaptureSink
 
     public void OnFrame(CameraFrame frame, TrackResult result)
     {
-        if (_debugFrames is null || frame.TimestampNs - _lastDebugFrame < DebugFrameIntervalNs) return;
+        if (_debugFrames is null) return;
+        if (_lastDebugFrame != long.MinValue && frame.TimestampNs - _lastDebugFrame < DebugFrameIntervalNs) return;
         _lastDebugFrame = frame.TimestampNs;
         _debugFrames.Writer.TryWrite(frame);
     }
