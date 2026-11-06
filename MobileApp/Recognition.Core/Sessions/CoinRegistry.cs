@@ -68,6 +68,29 @@ public sealed class CoinRegistry
     /// raffinamento affine), e solo dopo si abbina: una moneta a una traccia, la più vicina, senza che due monete dello stesso
     /// fotogramma finiscano sulla stessa traccia. Con poche monete già note si abbina senza allineare.
     /// </summary>
+    /// <summary>Oltre questo rapporto di grandezza con le monete già note un fotogramma chiave è collocato con la scala sbagliata.</summary>
+    public const double MaxKeyframeScaleRatio = 1.43;
+
+    /// <summary>
+    /// Quanto le monete di un fotogramma chiave sono più grandi (&gt;1) o più piccole (&lt;1) nel mosaico delle monete già note dello
+    /// stesso taglio (mediana, taglio dato dal rilevatore). Una moneta ha sempre la stessa grandezza nel mosaico: un rapporto lontano
+    /// da 1 vuol dire che il fotogramma è collocato con la scala sbagliata (nelle prove: ×1,8 e ×2,5 dopo qualche secondo, e ogni
+    /// moneta diventava una moneta nuova). Null se non ci sono almeno 3 monete confrontabili.
+    /// </summary>
+    public double? KeyframeScaleRatio(IReadOnlyList<CoinObservation> observations)
+    {
+        lock (_sync)
+        {
+            var known = _tracks.Where(t => t.DetectorCents is not null).GroupBy(t => t.DetectorCents!.Value)
+                .ToDictionary(g => g.Key, g => g.Select(t => (double)t.MosaicBox.Diameter).OrderBy(d => d).ElementAt(g.Count() / 2));
+            var ratios = observations
+                .Where(o => o.Cents is { } c && known.ContainsKey(c) && known[c] > 0)
+                .Select(o => o.MosaicBox.Diameter / known[o.Cents!.Value])
+                .OrderBy(r => r).ToList();
+            return ratios.Count < 3 ? null : ratios[ratios.Count / 2];
+        }
+    }
+
     public IReadOnlyList<CoinUpdate> ObserveKeyframe(IReadOnlyList<CoinObservation> observations)
     {
         lock (_sync)

@@ -530,8 +530,11 @@ public sealed class CaptureEngine
             var diameters = usable.Select(u => u.Coin.Box.Diameter).OrderBy(d => d).ToList();
             LastCoinDiameterPx = diameters[diameters.Count / 2];
         }
-        var updates = Coins.ObserveKeyframe(usable.Select(u => new CoinObservation(u.Coin.Box, u.MosaicBox, u.Coin.Confidence, u.Quality,
-            keyframe.Index, u.Coin.Cents, u.Coin.ClassConfidence)).ToList());
+        var observations = usable.Select(u => new CoinObservation(u.Coin.Box, u.MosaicBox, u.Coin.Confidence, u.Quality,
+            keyframe.Index, u.Coin.Cents, u.Coin.ClassConfidence)).ToList();
+        // solo per il registro: monete molto più grandi o piccole delle stesse già note = fotogramma collocato con la scala sbagliata
+        var scaleRatio = Coins.KeyframeScaleRatio(observations);
+        var updates = Coins.ObserveKeyframe(observations);
 
         for (var k = 0; k < usable.Count; k++)
         {
@@ -554,7 +557,8 @@ public sealed class CaptureEngine
         _log.Event("detect", new
         {
             keyframe = keyframe.Index, locateMs = DiagData.R(locateMs), totalMs = DiagData.R(timer.Elapsed.TotalMilliseconds),
-            raw = boxes.Count, accepted = changes.Count, tracks = Coins.Count, coinDiameterPx = DiagData.R(LastCoinDiameterPx, 0), boxes = logged
+            raw = boxes.Count, accepted = changes.Count, tracks = Coins.Count, coinDiameterPx = DiagData.R(LastCoinDiameterPx, 0),
+            scaleRatio = scaleRatio is { } r ? DiagData.R(r, 2) : (double?)null, boxes = logged
         });
 
         if (changes.Count == 0) return;

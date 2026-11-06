@@ -38,6 +38,12 @@ public sealed class ArCoreFrameSource : IFrameSource
 
     private const int MaxConsecutiveErrors = 30;
 
+    /// <summary>Dopo quanti aggiornamenti con il tracciamento attivo, senza piano, si ricava il piano dai punti 3D (circa 2 secondi).</summary>
+    private const int PointCloudAfterUpdates = 60;
+
+    /// <summary>Avvisi per il registro (es. da dove viene il piano del tavolo).</summary>
+    public Action<string, string>? Info { get; set; }
+
     /// <summary>ARCore è supportato su questo telefono (anche se non ancora installato)?</summary>
     public static bool IsSupported(Context context)
     {
@@ -105,6 +111,7 @@ public sealed class ArCoreFrameSource : IFrameSource
 
             var errors = 0;
             var planeFailed = false;
+            var trackingUpdates = 0;
             while (_running)
             {
                 try
@@ -115,7 +122,18 @@ public sealed class ArCoreFrameSource : IFrameSource
                     if (tracking && _lockedPlane is null && !planeFailed)
                     {
                         // la ricerca del piano non deve fermare i fotogrammi: se fallisce si prosegue senza piano (e lo si dice)
-                        try { _lockedPlane = FindTablePlane(session); }
+                        try
+                        {
+                            _lockedPlane = FindTablePlane(session);
+                            if (_lockedPlane is not null) Info?.Invoke("plane", "arcore_plane");
+                            // su un tavolo scuro e uniforme ARCore può non trovare il piano per decine di secondi (nelle prove fino a 60):
+                            // dopo un po' si ricava dai punti 3D già trovati, il livello orizzontale più popolato sotto il telefono
+                            else if (++trackingUpdates >= PointCloudAfterUpdates && trackingUpdates % 15 == 0)
+                            {
+                                _lockedPlane = PlaneFromPointCloud(frame, camera.Pose!);
+                                if (_lockedPlane is not null) Info?.Invoke("plane", "point_cloud");
+                            }
+                        }
                         catch (Exception ex) { planeFailed = true; Failed?.Invoke("plane", ex); }
                     }
                     if (_wantsFrame?.Invoke() != true) continue;
@@ -193,6 +211,36 @@ public sealed class ArCoreFrameSource : IFrameSource
             if (area > bestArea) { best = plane; bestArea = area; }
         }
         return best?.CenterPose is { } p ? Convert(p) : null;
+    }
+
+    /// <summary>
+    /// Piano del tavolo dai punti 3D di ARCore: il livello orizzontale (a passi di 1 cm) con più punti sotto il telefono. Il mondo di
+    /// ARCore ha l'asse Y verso l'alto, quindi il piano è orizzontale con rotazione nulla, come i piani orizzontali di ARCore.
+    /// Null se i punti sono pochi o sparsi.
+    /// </summary>
+    private static Pose? PlaneFromPointCloud(Com.Google.AR.Core.Frame frame, ArPose camera)
+    {
+        var cloud = frame.AcquirePointCloud()!;
+        try
+        {
+            var buffer = cloud.Points!;
+            var data = new float[buffer.Remaining()];
+            buffer.Get(data);
+            var cameraY = camera.Ty();
+            var levels = new List<float>();
+            for (var i = 0; i + 3 < data.Length; i += 4)
+                if (data[i + 3] >= 0.2f && data[i + 1] < cameraY - 0.08f) levels.Add(data[i + 1]);   // x, y, z, confidenza
+            if (levels.Count < 20) return null;
+            var best = levels.GroupBy(y => (int)Math.Floor(y * 100)).OrderByDescending(g => g.Count()).First();
+            if (best.Count() < 12) return null;
+            var centre = (best.Key + 0.5f) / 100f;
+            var level = levels.Where(y => Math.Abs(y - centre) < 0.015f).Average();
+            return new Pose(camera.Tx(), level, camera.Tz(), 0, 0, 0, 1);
+        }
+        finally
+        {
+            cloud.Close();
+        }
     }
 
     private static Pose Convert(ArPose p) => new(p.Tx(), p.Ty(), p.Tz(), p.Qx(), p.Qy(), p.Qz(), p.Qw());

@@ -73,6 +73,8 @@ public sealed class CaptureController
         var engine = new CaptureEngine(setup.Tracker, locator, sink, new MosaicCanvas(), log: log, markerDetector: markerDetector);
         if (setup.Source is ArCoreFrameSource arcore)
             arcore.Failed = (where, ex) => log.Event("error", new { where = "arcore_" + where, message = ex.Message, type = ex.GetType().Name, stack = ex.ToString() }, important: true);
+        if (setup.Source is ArCoreFrameSource arcoreInfo)
+            arcoreInfo.Info = (what, value) => log.Event("arcore_" + what, new { value }, important: true);
         var controller = new CaptureController(session, engine, setup.Source, sink, setup.Note, log);
         engine.Start();
 
