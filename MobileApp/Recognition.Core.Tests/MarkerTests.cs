@@ -148,3 +148,25 @@ public class DiameterCheckWithMarkerTests
         Assert.Equal(0.6f, result.Classification.Confidence);      // nessuna scala: invariata
     }
 }
+
+public class HybridFallbackTests
+{
+    [Fact]
+    public void Without_a_table_plane_the_hybrid_tracker_goes_on_with_features()
+    {
+        // fotogrammi senza posa ARCore (nessun piano): prima si aspetta, poi si prosegue con i punti caratteristici
+        var scene = new SyntheticScene(1200, 900, seed: 3);
+        var hybrid = new HybridMosaicTracker(new ArCorePlaneTracker(), new FeatureMosaicTracker(new OrbLite()));
+        TrackResult? last = null;
+        var placedBefore = 0;
+        for (var i = 0; i < HybridMosaicTracker.FallbackAfterFrames + 5; i++)
+        {
+            var view = SyntheticScene.View(400 + i * 4, 400, 480, 360);
+            last = hybrid.Process(new CameraFrame(scene.Render(view, 480, 360), i, 0));
+            if (i < HybridMosaicTracker.FallbackAfterFrames - 1 && last.FrameToMosaic is not null) placedBefore++;
+        }
+        Assert.Equal(0, placedBefore);
+        Assert.NotNull(last!.FrameToMosaic);
+        Assert.StartsWith("features_only", last.Detail!.Reason);
+    }
+}

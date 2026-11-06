@@ -104,7 +104,9 @@ public sealed class SessionClassifier
         // i marker non entrano nel controllo del taglio: con la scala dei marker le monete risultano il 10% più grandi del vero
         // (riquadro del rilevatore più largo della moneta, foglio forse stampato ridotto) e gli 1 cent diventavano 2 cent.
         // Il controllo usa la scala relativa tra le monete, che questo errore non lo vede.
-        var checkedItems = DiameterCheck.Apply(items, session.PxPerMm).ToDictionary(i => i.CoinId);
+        // nemmeno la scala di ARCore: nelle prove con l'Ibrido era sbagliata fino al +20-37% (tutte le monete «incoerenti», confidenza
+        // tagliata anche se i valori erano giusti), mentre il rapporto tra le monete restava coerente
+        var checkedItems = DiameterCheck.Apply(items).ToDictionary(i => i.CoinId);
 
         foreach (var coin in todo)
         {

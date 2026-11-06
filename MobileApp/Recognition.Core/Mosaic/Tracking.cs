@@ -510,10 +510,36 @@ public sealed class HybridMosaicTracker : IMosaicTracker, IKeyframeRelator
 
     public string Id => "hybrid";
 
+    /// <summary>
+    /// Fotogrammi elaborati senza piano del tavolo dopo i quali si prosegue con i soli punti caratteristici (circa 5 secondi): su un
+    /// tavolo scuro e uniforme ARCore può non trovare il piano per decine di secondi, e intanto non si acquisiva nulla.
+    /// </summary>
+    public const int FallbackAfterFrames = 40;
+
+    private int _waitingForPlane;
+    private bool _placedOnce;
+    private bool _featuresOnly;
+
     public TrackResult Process(CameraFrame frame)
     {
+        if (_featuresOnly)
+        {
+            var alone = _features.Process(frame);
+            return alone with { Detail = alone.Detail is { } d ? d with { Source = Id, Reason = "features_only:" + d.Reason } : null };
+        }
+
         var coarse = _pose.Process(frame);
-        if (coarse.FrameToMosaic is not { } prior) return coarse;
+        if (coarse.FrameToMosaic is not { } prior)
+        {
+            // per coerenza del mosaico il cambio si fa solo prima di aver collocato qualcosa con ARCore
+            if (!_placedOnce && ++_waitingForPlane >= FallbackAfterFrames)
+            {
+                _featuresOnly = true;
+                return Process(frame);
+            }
+            return coarse;
+        }
+        _placedOnce = true;
 
         var refined = _features.Process(frame, prior);
         var detail = refined.Detail! with { Source = Id };

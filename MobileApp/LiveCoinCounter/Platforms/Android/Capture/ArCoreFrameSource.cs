@@ -218,7 +218,7 @@ public sealed class ArCoreFrameSource : IFrameSource
     /// ARCore ha l'asse Y verso l'alto, quindi il piano è orizzontale con rotazione nulla, come i piani orizzontali di ARCore.
     /// Null se i punti sono pochi o sparsi.
     /// </summary>
-    private static Pose? PlaneFromPointCloud(Com.Google.AR.Core.Frame frame, ArPose camera)
+    private Pose? PlaneFromPointCloud(Com.Google.AR.Core.Frame frame, ArPose camera)
     {
         var cloud = frame.AcquirePointCloud()!;
         try
@@ -230,8 +230,14 @@ public sealed class ArCoreFrameSource : IFrameSource
             var levels = new List<float>();
             for (var i = 0; i + 3 < data.Length; i += 4)
                 if (data[i + 3] >= 0.2f && data[i + 1] < cameraY - 0.08f) levels.Add(data[i + 1]);   // x, y, z, confidenza
-            if (levels.Count < 20) return null;
+            var total = data.Length / 4;
+            if (levels.Count < 20)
+            {
+                Info?.Invoke("points", $"{total} punti, {levels.Count} sotto il telefono con confidenza sufficiente");
+                return null;
+            }
             var best = levels.GroupBy(y => (int)Math.Floor(y * 100)).OrderByDescending(g => g.Count()).First();
+            Info?.Invoke("points", $"{total} punti, {levels.Count} sotto il telefono, livello più popolato {best.Count()}");
             if (best.Count() < 12) return null;
             var centre = (best.Key + 0.5f) / 100f;
             var level = levels.Where(y => Math.Abs(y - centre) < 0.015f).Average();
