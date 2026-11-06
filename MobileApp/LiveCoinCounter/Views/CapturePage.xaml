@@ -71,6 +71,8 @@
         <Border IsVisible="{Binding HasRecovery}" VerticalOptions="Center" HorizontalOptions="Center" Margin="24,0"
                 Padding="24,18" StrokeThickness="0" StrokeShape="RoundRectangle 26" BackgroundColor="#B3000000" InputTransparent="True">
             <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
+                <Image Source="{Binding LastGoodImage}" Rotation="{Binding LastGoodRotation}" HeightRequest="130" HorizontalOptions="Center"
+                       SemanticProperties.Description="Ultima zona agganciata: cercala sul tavolo" />
                 <Label Text="▲" FontSize="84" TextColor="#FF9800" HorizontalOptions="Center"
                        Rotation="{Binding ArrowRotation}" SemanticProperties.Description="Direzione in cui spostare il telefono" />
                 <Label Text="{Binding RecoveryText}" TextColor="White" FontSize="16" FontAttributes="Bold"

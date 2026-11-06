@@ -30,6 +30,10 @@ public sealed class CaptureViewModel : ObservableObject
     private string? _stickyText;
     private long _stickySince, _stickyLastSeen;
     private bool _hasRecovery;
+    private ImageSource? _lastGoodImage;
+    private double _lastGoodRotation;
+    private long _lastGoodTick;
+    private ImageSource? _lastGoodHolder;
     private double _arrowRotation;
     private string _recoveryText = string.Empty;
     private bool _scaleDirty = true;
@@ -65,6 +69,19 @@ public sealed class CaptureViewModel : ObservableObject
     {
         get => _hasRecovery;
         private set => SetProperty(ref _hasRecovery, value);
+    }
+
+    /// <summary>L'ultima inquadratura agganciata: da persi la si mostra, da cercare a occhio sul tavolo.</summary>
+    public ImageSource? LastGoodImage
+    {
+        get => _lastGoodImage;
+        private set => SetProperty(ref _lastGoodImage, value);
+    }
+
+    public double LastGoodRotation
+    {
+        get => _lastGoodRotation;
+        private set => SetProperty(ref _lastGoodRotation, value);
     }
 
     public double ArrowRotation
@@ -265,11 +282,14 @@ public sealed class CaptureViewModel : ObservableObject
             var lost = capturing && update.Status == TrackStatus.Lost;
             _view.GhostQuad = lost ? update.LastKnownQuad : null;
             _view.EstimatedQuad = lost ? update.EstimatedQuad : null;
-            UpdateRecovery(lost ? update.Recovery : null);
+            UpdateRecovery(lost ? update.Recovery : null, lost && update.Featureless);
+            LastGoodImage = lost ? _lastGoodHolder : null;
 
             var shown = update.Hint ?? (update.PendingDetections > 3 ? "Analisi in corso: rallenta un po'" : null);
             if (lost && update.Recovery is not null)
-                shown = "Posizione persa: segui la freccia per tornare nella zona già ripresa (o tocca ↻ per ricominciare)";
+                shown = update.Featureless
+                    ? "Tavolo vuoto: torna dove vedi le monete (o tocca ↻ per ricominciare)"
+                    : "Posizione persa: segui la freccia e cerca la zona nella foto (o tocca ↻ per ricominciare)";
             Hint = StickyHint(shown, important: lost);
 
             // immagini sfocate con luce sufficiente: prova a rimettere a fuoco (al massimo ogni 5 secondi)
@@ -289,6 +309,16 @@ public sealed class CaptureViewModel : ObservableObject
         {
             _loggedHint = Hint;
             _controller.Log.Event("ui_hint", new { text = Hint, status = _lastTracking?.Status });
+        }
+
+        // l'ultima inquadratura agganciata (una al secondo): da persi serve a ritrovare la zona a occhio
+        if (_state == State.Capturing && _lastTracking is { Status: TrackStatus.Tracking } && _controller.LatestFrame is { } good &&
+            Environment.TickCount64 - _lastGoodTick > 1000)
+        {
+            _lastGoodTick = Environment.TickCount64;
+            var jpeg = AndroidImaging.ToJpeg(ImageOps.Downscale(good.Image, 200), 70);
+            _lastGoodHolder = ImageSource.FromStream(() => new MemoryStream(jpeg));
+            LastGoodRotation = good.RotationDegrees;
         }
 
         // anteprima della fotocamera: l'ultimo fotogramma, ridotto (solo durante l'acquisizione)
@@ -319,9 +349,17 @@ public sealed class CaptureViewModel : ObservableObject
     }
 
     /// <summary>La freccia che dice come muovere il telefono per riagganciarsi, con la distanza (in cm se la scala è nota).</summary>
-    private void UpdateRecovery(RecoveryGuidance? guidance)
+    private void UpdateRecovery(RecoveryGuidance? guidance, bool featureless)
     {
-        HasRecovery = guidance is not null;
+        HasRecovery = guidance is not null || featureless;
+        if (guidance is null && !featureless) return;
+        if (featureless)
+        {
+            // niente da riconoscere qui: la freccia non ha senso, meglio dire cosa fare e mostrare dove tornare
+            if (guidance is not null) ArrowRotation = guidance.ArrowDegrees;
+            RecoveryText = "Qui il tavolo è vuoto: non ci sono punti da riconoscere. Torna indietro verso le monete già riprese (guarda la foto)";
+            return;
+        }
         if (guidance is null) return;
 
         ArrowRotation = guidance.ArrowDegrees;

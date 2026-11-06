@@ -49,7 +49,8 @@ public sealed record CaptureOptions
 /// collocato: quando il tracking è perso indica all'operatore dove tornare.
 /// </summary>
 public sealed record TrackingUpdate(TrackStatus Status, string? Hint, Quad? FrameQuad, int Keyframes, int PendingDetections, bool MosaicFull,
-    Quad? LastKnownQuad = null, bool Blurry = false, bool Dark = false, RecoveryGuidance? Recovery = null, Quad? EstimatedQuad = null);
+    Quad? LastKnownQuad = null, bool Blurry = false, bool Dark = false, RecoveryGuidance? Recovery = null, Quad? EstimatedQuad = null,
+    bool Featureless = false);
 
 /// <summary>
 /// Come muovere il telefono per tornare dove il tracking era agganciato, quando si è perso.
@@ -147,6 +148,7 @@ public sealed class CaptureEngine
     private long _statsPushed, _statsSkipped, _statsProcessed, _statsTrackTicks, _statsDetectTicks, _statsDetections;
     private long _lastStatsMs;
     private int _framesSeen;
+    private int _poorFrames;
     private double _brightnessAverage;
 
     public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null,
@@ -314,10 +316,14 @@ public sealed class CaptureEngine
         else if (hint is null && blurry) hint = "Immagine sfocata: allontana il telefono (25–40 cm) e tienilo fermo";
 
         if (Canvas.IsFull) hint = "Superficie massima raggiunta: ferma l'acquisizione";
+        // pochi punti riconoscibili per più fotogrammi di fila: il telefono guarda un tavolo vuoto (nessun aggancio possibile qui)
+        _poorFrames = result.Detail is { Features: < 150 } ? _poorFrames + 1 : 0;
+        var featureless = result.Status == TrackStatus.Lost && _poorFrames >= 3;
+        if (featureless) { blurry = false; if (hint is not null && hint.StartsWith("Immagine sfocata", StringComparison.Ordinal)) hint = null; }
         var recovery = result.Estimate is { } estimate ? RecoveryGuidance.From(estimate, frame.Image.Width, frame.Image.Height) : null;
         var estimatedQuad = result.Estimate?.FrameToMosaic.MapRect(frame.Image.Width, frame.Image.Height);
         TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad, blurry, dark,
-            recovery, estimatedQuad));
+            recovery, estimatedQuad, featureless));
 
         if (_log.Enabled)
         {
