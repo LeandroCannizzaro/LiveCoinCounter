@@ -156,10 +156,20 @@ public static class DiameterCheck
         return ratios.Count < 2 ? null : ratios[ratios.Count / 2];
     }
 
-    public static IReadOnlyList<Item> Apply(IReadOnlyList<Item> items, double? knownPxPerMm = null)
+    /// <summary>Con una scala misurata dai marker la tolleranza è stretta: vale vicino al marker.</summary>
+    public const double MarkerTolerance = 0.07;
+
+    /// <summary>Il diametro coincide con quello atteso entro questo errore: il marker conferma il taglio e la confidenza sale.</summary>
+    public const double MarkerConfirmError = 0.05;
+
+    /// <param name="markers">I marker di scala della sessione: dove ce n'è uno vicino la scala è quella misurata, e vale più di ogni stima.</param>
+    public static IReadOnlyList<Item> Apply(IReadOnlyList<Item> items, double? knownPxPerMm = null, IReadOnlyList<MarkerLandmark>? markers = null)
     {
         var global = knownPxPerMm ?? EstimatePxPerMm(items);
-        if (global is null or <= 0) return items;
+        var hasMarkers = markers is { Count: > 0 };
+        var hasGlobal = global is > 0;
+        if (!hasGlobal && !hasMarkers) return items;
+        global ??= 1;
 
         return items.Select(item =>
         {
@@ -168,7 +178,18 @@ public static class DiameterCheck
             // scala nota > scala delle monete vicine > scala di tutta la sessione
             var scale = global.Value;
             var tolerance = knownPxPerMm is null ? GlobalTolerance : Tolerance;
-            if (knownPxPerMm is null && LocalScale(item, items) is { } local)
+            var fromMarker = false;
+            if (hasMarkers && !float.IsNaN(item.X) && MarkerScale.At(item.X, item.Y, markers!) is { } markerScale)
+            {
+                scale = markerScale;
+                tolerance = MarkerTolerance;
+                fromMarker = true;
+            }
+            else if (!hasGlobal)
+            {
+                return item;                  // niente scala per questa moneta
+            }
+            else if (knownPxPerMm is null && LocalScale(item, items) is { } local)
             {
                 scale = local;
                 tolerance = LocalTolerance;
@@ -176,6 +197,18 @@ public static class DiameterCheck
 
             var mm = item.DiameterPx / scale;
             double Error(int cents) => Math.Abs(mm - EuroCoins.DiameterOf(cents)) / EuroCoins.DiameterOf(cents);
+            if (fromMarker && Error(c.Cents) <= MarkerConfirmError && c.Confidence >= 0.3f)
+            {
+                // il marker conferma la dimensione: più sicuri (senza arrivare a 1)
+                return item with
+                {
+                    Classification = c with
+                    {
+                        Confidence = 1 - (1 - c.Confidence) * 0.6f,
+                        Note = $"Dimensione confermata dal marker ({mm:0.0} mm)"
+                    }
+                };
+            }
             if (Error(c.Cents) <= tolerance) return item;
 
             // il controllo sul colore ha già scartato i tagli di un altro colore: il diametro non li deve far tornare
@@ -189,11 +222,11 @@ public static class DiameterCheck
                     {
                         Cents = alt.Cents,
                         Confidence = Math.Min(c.Confidence, Math.Max(alt.Score, 0.5f)),
-                        Note = $"Taglio corretto con il diametro ({mm:0.0} mm)"
+                        Note = fromMarker ? $"Taglio corretto con il marker ({mm:0.0} mm)" : $"Taglio corretto con il diametro ({mm:0.0} mm)"
                     }
                 };
 
-            return item with { Classification = c with { Confidence = c.Confidence * 0.6f, Note = $"Diametro incoerente ({mm:0.0} mm)" } };
+            return item with { Classification = c with { Confidence = c.Confidence * 0.6f, Note = fromMarker ? $"Diametro incoerente con il marker ({mm:0.0} mm)" : $"Diametro incoerente ({mm:0.0} mm)" } };
         }).ToList();
     }
 }

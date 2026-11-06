@@ -67,7 +67,9 @@ public sealed class CaptureController
         }, important: true);
 
         var sink = new AppCaptureSink(session, repository);
-        var engine = new CaptureEngine(setup.Tracker, locator, sink, new MosaicCanvas(), log: log);
+        var markerDetector = SessionServices.CreateMarkerDetector();
+        log.Event("marker_detector", new { available = markerDetector is not null });
+        var engine = new CaptureEngine(setup.Tracker, locator, sink, new MosaicCanvas(), log: log, markerDetector: markerDetector);
         var controller = new CaptureController(session, engine, setup.Source, sink, setup.Note, log);
         engine.Start();
 
@@ -150,6 +152,7 @@ public sealed class CaptureController
         session.MosaicHeight = (int)bounds.Height;
         session.KeyframeCount = Engine.KeyframeCount;
         session.PxPerMm = Engine.PxPerMm;
+        session.MarkersJson = SessionMarkers.Serialize(Engine.Markers.Landmarks);
         session.EndedAt = DateTime.Now;
         session.Status = SessionStatus.Classifying;
         await repository.UpdateSessionAsync(session);
@@ -159,7 +162,7 @@ public sealed class CaptureController
         _log.Event("session_end", new
         {
             session = session.Id, durationS = (session.EndedAt - session.StartedAt)?.TotalSeconds, keyframes = session.KeyframeCount,
-            coins = Engine.Coins.Count, mosaic = new { session.MosaicWidth, session.MosaicHeight }, session.PxPerMm, dropped = _log.Dropped
+            coins = Engine.Coins.Count, markers = Engine.Markers.Count, mosaic = new { session.MosaicWidth, session.MosaicHeight }, session.PxPerMm, dropped = _log.Dropped
         }, important: true);
         await _log.DisposeAsync();
         await SessionServices.WriteSnapshotAsync(session.Id);

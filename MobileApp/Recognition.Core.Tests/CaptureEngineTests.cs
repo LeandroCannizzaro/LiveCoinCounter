@@ -58,6 +58,40 @@ public class CaptureEngineTests
         Assert.All(sink.Crops.Values, c => Assert.Equal(256, c.Width));
     }
 
+    private sealed class FixedMarkerDetector : IMarkerDetector
+    {
+        public int Calls;
+        public IReadOnlyList<MarkerDetection> Detect(GrayImage image)
+        {
+            Calls++;
+            return new[] { new MarkerDetection(4, new Quad(new PointD(100, 100), new PointD(160, 100), new PointD(160, 160), new PointD(100, 160))) };
+        }
+    }
+
+    [Fact]
+    public async Task Engine_registers_markers_seen_in_tracked_frames()
+    {
+        var scene = new SyntheticScene(1200, 900, seed: 5);
+        var detector = new FixedMarkerDetector();
+        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite(), new FeatureTrackerOptions { MosaicScale = 1 }), new OracleLocator(scene),
+            new MemorySink(), new MosaicCanvas(), new CaptureOptions { MinAbsoluteSharpness = 0, FirstKeyframeMinSharpness = 0, MarkerEveryNthFrame = 1 },
+            markerDetector: detector);
+        engine.Start();
+
+        for (var i = 0; i < 6; i++)
+        {
+            var view = SyntheticScene.View(300 + i * 20, 300, 480, 360, 0);
+            engine.PushFrame(new CameraFrame(scene.Render(view, 480, 360), i, 0));
+            while (!engine.WantsFrame) await Task.Delay(1);
+            await Task.Delay(5);
+        }
+        await engine.StopAsync();
+
+        Assert.True(detector.Calls >= 3, $"chiamate del rilevatore: {detector.Calls}");
+        Assert.True(engine.Markers.Count >= 1);
+        Assert.True(engine.Markers.MedianPxPerMm > 0);
+    }
+
     [Fact]
     public async Task Lost_tracking_reports_the_last_known_position()
     {

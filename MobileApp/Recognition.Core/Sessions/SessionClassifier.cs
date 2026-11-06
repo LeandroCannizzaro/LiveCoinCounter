@@ -34,7 +34,7 @@ public sealed class SessionClassifier
         var done = 0;
         var results = new Dictionary<int, CoinClassification>();
 
-        _log.Event("classify_start", new { classifier = classifier.Id, onlyUncertain, replace, coins = todo.Count, pxPerMm = session.PxPerMm }, important: true);
+        _log.Event("classify_start", new { classifier = classifier.Id, onlyUncertain, replace, coins = todo.Count, pxPerMm = session.PxPerMm, markers = SessionMarkers.Parse(session.MarkersJson).Count }, important: true);
         progress?.Report((0, todo.Count));
         foreach (var coin in todo)
         {
@@ -101,7 +101,8 @@ public sealed class SessionClassifier
                         c.X + c.Width / 2, c.Y + c.Height / 2, c.ColorTint)
                     : null)
             .Where(i => i is not null).Cast<DiameterCheck.Item>().ToList();
-        var checkedItems = DiameterCheck.Apply(items, session.PxPerMm).ToDictionary(i => i.CoinId);
+        var markers = SessionMarkers.Parse(session.MarkersJson);
+        var checkedItems = DiameterCheck.Apply(items, session.PxPerMm, markers).ToDictionary(i => i.CoinId);
 
         foreach (var coin in todo)
         {

@@ -171,6 +171,21 @@ public static class ImageHelper
                 canvas.DrawText(label, x + 3, y - 4, text);
             }
 
+            // i marker di scala visti: un riquadro azzurro di 20 mm con il loro numero (la posizione è quella sul mosaico)
+            using var markerBox = new Android.Graphics.Paint { AntiAlias = true, StrokeWidth = Math.Max(2f, unit * 1.2f), Color = Android.Graphics.Color.Rgb(0, 200, 255) };
+            markerBox.SetStyle(Android.Graphics.Paint.Style.Stroke);
+            foreach (var m in LiveCoinCounter.Sessions.SessionMarkers.Parse(session.MarkersJson))
+            {
+                var half = (float)(LiveCoinCounter.Mosaic.MarkerSpec.SideMm * m.PxPerMm / 2 * session.PreviewScale);
+                var mx = (float)((m.X - session.PreviewOriginX) * session.PreviewScale);
+                var my = (float)((m.Y - session.PreviewOriginY) * session.PreviewScale);
+                canvas.DrawRect(mx - half, my - half, mx + half, my + half, markerBox);
+                var markerLabel = $"M{m.Id}";
+                back.Color = Android.Graphics.Color.Rgb(0, 200, 255);
+                canvas.DrawRect(mx - half, my - half - text.TextSize - 4, mx - half + text.MeasureText(markerLabel) + 6, my - half, back);
+                canvas.DrawText(markerLabel, mx - half + 3, my - half - 4, text);
+            }
+
             return Encode(bitmap);
         }
         catch

@@ -7,6 +7,12 @@ namespace LiveCoinCounter.Sessions;
 
 public sealed record CaptureOptions
 {
+    /// <summary>Si cercano i marker di scala ogni N fotogrammi elaborati (la ricerca costa qualche decina di millisecondi).</summary>
+    public int MarkerEveryNthFrame { get; init; } = 3;
+
+    /// <summary>Lato maggiore dell'immagine in grigio su cui si cercano i marker: più grande vede marker più piccoli o lontani.</summary>
+    public int MarkerMaxSide { get; init; } = 1280;
+
     /// <summary>Un fotogramma diventa chiave quando la parte già coperta del mosaico scende sotto questa frazione.</summary>
     public double KeyframeMaxCoverage { get; init; } = 0.65;
 
@@ -141,6 +147,8 @@ public sealed class CaptureEngine
     private Quad? _lastKnownQuad;
     private volatile bool _busy;
     private readonly IDiagLog _log;
+    private readonly IMarkerDetector? _markerDetector;
+    private int _markerFrames;
 
     // contatori per il registro diagnostico (statistiche ogni 2 secondi)
     private readonly Stopwatch _statsClock = Stopwatch.StartNew();
@@ -152,8 +160,9 @@ public sealed class CaptureEngine
     private double _brightnessAverage;
 
     public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null,
-        IDiagLog? log = null)
+        IDiagLog? log = null, IMarkerDetector? markerDetector = null)
     {
+        _markerDetector = markerDetector;
         _tracker = tracker;
         _locator = locator;
         _sink = sink;
@@ -164,6 +173,9 @@ public sealed class CaptureEngine
 
     public MosaicCanvas Canvas { get; }
     public CoinRegistry Coins { get; } = new();
+
+    /// <summary>I marker di scala visti finora, sul mosaico (vuoto se non c'è un rilevatore di marker).</summary>
+    public MarkerRegistry Markers { get; } = new();
     public int KeyframeCount => _keyframeCount;
 
     /// <summary>Scala del mosaico in pixel/mm, quando il tracker la conosce (ARCore).</summary>
@@ -243,6 +255,36 @@ public sealed class CaptureEngine
         }
     }
 
+    /// <summary>
+    /// Cerca i marker di scala nel fotogramma (uno ogni <see cref="CaptureOptions.MarkerEveryNthFrame"/>) e li registra sul mosaico con
+    /// l'omografia del fotogramma. Un errore del rilevatore non ferma l'acquisizione: si registra e si prosegue senza marker.
+    /// </summary>
+    private void DetectMarkers(CameraFrame frame, TrackResult result)
+    {
+        if (_markerDetector is null || result.FrameToMosaic is not { } h) return;
+        if (_markerFrames++ % Math.Max(1, _options.MarkerEveryNthFrame) != 0) return;
+        try
+        {
+            var timer = Stopwatch.StartNew();
+            var gray = ImageOps.ToGray(frame.Image, _options.MarkerMaxSide, out var scale);
+            var found = _markerDetector.Detect(gray);
+            if (found.Count == 0) return;
+
+            var seen = new List<object>();
+            foreach (var marker in found)
+            {
+                var accepted = Markers.Observe(marker, h, 1.0 / scale);
+                MarkerRegistry.TryMeasure(marker.Corners, h, 1.0 / scale, out _, out var pxPerMm);
+                seen.Add(new { id = marker.Id, pxPerMm = DiagData.R(pxPerMm, 3), accepted });
+            }
+            _log.Event("markers", new { frame = _framesSeen, ms = DiagData.R(timer.Elapsed.TotalMilliseconds), seen, total = Markers.Count });
+        }
+        catch (Exception ex)
+        {
+            _log.Event("error", new { where = "markers", message = ex.Message }, important: true);
+        }
+    }
+
     private async Task ProcessFrameAsync(CameraFrame frame)
     {
         var timer = Stopwatch.StartNew();
@@ -252,6 +294,7 @@ public sealed class CaptureEngine
         Interlocked.Increment(ref _processed);
         _sink.OnFrame(frame, result);
         if (result.PxPerMm is { } pxPerMm) PxPerMm = pxPerMm;
+        DetectMarkers(frame, result);
 
         var hint = result.Hint;
         Quad? quad = null;

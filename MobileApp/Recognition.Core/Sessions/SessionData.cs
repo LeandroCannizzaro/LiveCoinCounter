@@ -52,6 +52,9 @@ public sealed class SessionRecord
 
     /// <summary>Pixel del mosaico per millimetro, se nota (ARCore).</summary>
     public double? PxPerMm { get; set; }
+
+    /// <summary>I marker di scala visti (JSON, vedi <see cref="SessionMarkers"/>): posizione sul mosaico e scala locale di ognuno.</summary>
+    public string? MarkersJson { get; set; }
     public int KeyframeCount { get; set; }
     public string LocatorId { get; set; } = string.Empty;
     public string? ClassifierId { get; set; }

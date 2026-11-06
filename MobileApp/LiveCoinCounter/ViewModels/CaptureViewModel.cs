@@ -37,6 +37,8 @@ public sealed class CaptureViewModel : ObservableObject
     private double _arrowRotation;
     private string _recoveryText = string.Empty;
     private bool _scaleDirty = true;
+    private int _lastMarkerCount;
+    private int _markerCount;
     private SurfaceScale? _gridScale;
     private bool _torchOn;
     private long _lastRefocusTick;
@@ -137,7 +139,14 @@ public sealed class CaptureViewModel : ObservableObject
         private set { if (SetProperty(ref _coinCount, value)) OnPropertyChanged(nameof(CoinCountText)); }
     }
 
-    public string CoinCountText => CoinCount == 1 ? "1 moneta trovata" : $"{CoinCount} monete trovate";
+    /// <summary>I marker di scala visti finora.</summary>
+    public int MarkerCount
+    {
+        get => _markerCount;
+        private set { if (SetProperty(ref _markerCount, value)) OnPropertyChanged(nameof(CoinCountText)); }
+    }
+
+    public string CoinCountText => (CoinCount == 1 ? "1 moneta trovata" : $"{CoinCount} monete trovate") + (MarkerCount > 0 ? $" · {MarkerCount} marker" : string.Empty);
 
     public double Progress
     {
@@ -231,6 +240,8 @@ public sealed class CaptureViewModel : ObservableObject
         _lastError = null;
         _gridScale = null;
         _scaleDirty = true;
+        MarkerCount = 0;
+        _lastMarkerCount = 0;
         _torchOn = false;
         OnPropertyChanged(nameof(TorchSymbol));
         while (_changedTiles.TryDequeue(out _)) { }
@@ -386,10 +397,13 @@ public sealed class CaptureViewModel : ObservableObject
         if (_view is null) return;
 
         // la scala serve anche alla freccia di ritorno (distanza in cm), non solo alla griglia
-        if (_scaleDirty || engine.PxPerMm is not null)
+        var markerCount = engine.Markers.Count;
+        MarkerCount = markerCount;
+        if (_scaleDirty || engine.PxPerMm is not null || markerCount != _lastMarkerCount)
         {
             _scaleDirty = false;
-            _gridScale = SurfaceScale.FromTracks(engine.PxPerMm, engine.Coins.Tracks);
+            _lastMarkerCount = markerCount;
+            _gridScale = SurfaceScale.FromTracks(engine.PxPerMm, engine.Coins.Tracks, engine.Markers.Landmarks);
         }
 
         var grid = SettingsService.Grid;
