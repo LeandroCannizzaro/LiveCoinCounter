@@ -12,5 +12,6 @@ public partial class AppShell : Shell
         Routing.RegisterRoute("session", typeof(SessionSummaryPage));
         Routing.RegisterRoute("coins", typeof(CoinListPage));
         Routing.RegisterRoute("coin", typeof(CoinDetailPage));
+        Routing.RegisterRoute("surface", typeof(SurfacePage));
     }
 }

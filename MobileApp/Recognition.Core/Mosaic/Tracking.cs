@@ -24,7 +24,7 @@ public sealed record CandidateAttempt(int Keyframe, int Matches, int Inliers, do
 
 /// <summary>Perché il tracking ha dato quel risultato: serve al registro diagnostico, non alla logica.</summary>
 public sealed record TrackDetail(string Source, int Features, int KeyframeCount, int LostFrames, bool Relocalizing,
-    IReadOnlyList<CandidateAttempt> Attempts, string? Reason = null, double? Deviation = null);
+    IReadOnlyList<CandidateAttempt> Attempts, string? Reason = null, double? Deviation = null, int Anchors = 0, bool AnchorAdded = false);
 
 /// <summary>
 /// Colloca ogni fotogramma nel mosaico. Tre implementazioni, scelte nelle impostazioni: feature (OpenCV o codice puro),
@@ -46,8 +46,11 @@ public sealed record FeatureTrackerOptions
     public int TrackingMaxSide { get; init; } = 640;
     public int MaxFeatures { get; init; } = 600;
 
-    /// <summary>Pixel del mosaico per pixel del primo fotogramma: 0,5 tiene il mosaico leggero (il rilevamento usa i fotogrammi originali).</summary>
-    public double MosaicScale { get; init; } = 0.5;
+    /// <summary>
+    /// Pixel del mosaico per pixel del primo fotogramma: 0,75 dà un mosaico dettagliato (da ingrandire a tutto schermo) e
+    /// resta leggero (il rilevamento usa i fotogrammi originali). Era 0,5.
+    /// </summary>
+    public double MosaicScale { get; init; } = 0.75;
     public double RansacThreshold { get; init; } = 3.0;
     public int MinInliers { get; init; } = 20;
     public double MinInlierRatio { get; init; } = 0.2;
@@ -60,6 +63,27 @@ public sealed record FeatureTrackerOptions
 
     /// <summary>Punti minimi nel primo fotogramma: senza, il mosaico partirebbe da una base su cui non ci si può riagganciare.</summary>
     public int MinInitialFeatures { get; init; } = 40;
+
+    // ---- fotogrammi di aggancio ----
+    // Dalle prove sul campo: con un solo fotogramma chiave per decine di secondi gli inlier calano da 350 a 20 in poco più
+    // di un secondo (tavolo metallico, riflessi) e il tracking si perde. Il tracker aggiunge da sé fotogrammi di aggancio
+    // leggeri (solo punti caratteristici, nessun mosaico né rilevamento) così i frame si confrontano sempre con uno vicino.
+
+    /// <summary>Un nuovo fotogramma di aggancio quando il centro dista più di questa frazione del lato del fotogramma dal più vicino.</summary>
+    public double AnchorSpacing { get; init; } = 0.3;
+
+    /// <summary>…oppure quando l'aggancio è debole (meno inlier di così), purché siano almeno <see cref="MinAnchorInliers"/>.</summary>
+    public int AnchorBelowInliers { get; init; } = 60;
+    public int MinAnchorInliers { get; init; } = 25;
+
+    /// <summary>Fotogrammi minimi tra due fotogrammi di aggancio.</summary>
+    public int MinAnchorGapFrames { get; init; } = 2;
+
+    /// <summary>Oltre questo numero si scartano i fotogrammi di aggancio più vecchi (quelli chiave restano).</summary>
+    public int MaxAnchors { get; init; } = 120;
+
+    /// <summary>Se un candidato ha già almeno questi inlier (e rapporto ≥ 0,5) non si provano gli altri: dimezza il tempo per fotogramma.</summary>
+    public int EarlyAcceptInliers { get; init; } = 80;
 }
 
 /// <summary>
@@ -69,7 +93,7 @@ public sealed record FeatureTrackerOptions
 /// </summary>
 public sealed class FeatureMosaicTracker : IMosaicTracker
 {
-    private sealed record Keyframe(FeatureSet Features, float GrayScale, Homography FrameToMosaic, PointD Center, double AreaScale);
+    private sealed record Keyframe(FeatureSet Features, float GrayScale, Homography FrameToMosaic, PointD Center, double AreaScale, bool IsAnchor = false);
 
     private readonly IFeatureExtractor _extractor;
     private readonly FeatureTrackerOptions _options;
@@ -78,6 +102,7 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
     private int _lostFrames;
     private int _relocalizeOffset;
     private (FeatureSet Features, float Scale, int Width, int Height)? _pending;
+    private int _framesSinceAnchor = int.MaxValue / 2;
 
     public FeatureMosaicTracker(IFeatureExtractor extractor, FeatureTrackerOptions? options = null)
     {
@@ -164,6 +189,9 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
             attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "ok"));
             best = candidate;
             bestInliers = ransac.Inliers;
+
+            // i candidati sono in ordine di vicinanza: se il primo aggancia bene non serve provare gli altri
+            if (bestInliers >= _options.EarlyAcceptInliers && ransac.InlierRatio >= 0.5) break;
         }
 
         if (best is null)
@@ -177,8 +205,32 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
 
         _lostFrames = 0;
         _last = best;
+        _framesSinceAnchor++;
+        var anchored = TryAddAnchor(best.Value, bestInliers);
         return new TrackResult(TrackStatus.Tracking, best, sharpness, Inliers: bestInliers,
-            Detail: new TrackDetail(Id, features.Count, _keyframes.Count, 0, relocalizing, attempts, "placed"));
+            Detail: new TrackDetail(Id, features.Count, _keyframes.Count, 0, relocalizing, attempts, "placed",
+                Anchors: _keyframes.Count(k => k.IsAnchor), AnchorAdded: anchored));
+    }
+
+    /// <summary>
+    /// Aggiunge il fotogramma appena collocato come fotogramma di aggancio se si è allontanato dai riferimenti noti o se
+    /// l'aggancio è debole: i frame successivi avranno sempre un riferimento vicino e simile.
+    /// </summary>
+    private bool TryAddAnchor(Homography frameToMosaic, int inliers)
+    {
+        if (_pending is not { } p || inliers < _options.MinAnchorInliers || _framesSinceAnchor < _options.MinAnchorGapFrames) return false;
+
+        var center = Map(frameToMosaic, new PointD(p.Width / 2.0, p.Height / 2.0));
+        var quad = frameToMosaic.MapRect(p.Width, p.Height);
+        var side = Math.Min(quad.A.DistanceTo(quad.B), quad.A.DistanceTo(quad.D));
+        var nearest = _keyframes.Min(k => k.Center.DistanceTo(center));
+        if (nearest < _options.AnchorSpacing * side && inliers >= _options.AnchorBelowInliers) return false;
+
+        _keyframes.Add(new Keyframe(p.Features, p.Scale, frameToMosaic, center, frameToMosaic.AreaScaleAt(p.Width / 2.0, p.Height / 2.0), IsAnchor: true));
+        _framesSinceAnchor = 0;
+        if (_keyframes.Count(k => k.IsAnchor) > _options.MaxAnchors)
+            _keyframes.RemoveAt(_keyframes.FindIndex(k => k.IsAnchor));
+        return true;
     }
 
     public void CommitKeyframe(Homography frameToMosaic)

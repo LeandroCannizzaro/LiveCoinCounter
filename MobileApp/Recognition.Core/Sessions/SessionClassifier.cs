@@ -76,16 +76,29 @@ public sealed class SessionClassifier
                 result = detector;
             }
 
+            // controllo incrociato sul colore (rame / oro), con il taglio del rilevatore come ipotesi alternativa
+            if (result is not null && !onlyUncertain)
+            {
+                var extra = coin.DetectorCents is { } d ? new[] { (d, coin.DetectorClassConfidence) } : null;
+                var colorChecked = ColorCheck.Apply(result, coin.ColorTint, extra);
+                if (!ReferenceEquals(colorChecked, result))
+                {
+                    _log.Event("color_check", new { coin = coin.Number, tint = coin.ColorTint, hue = coin.ColorHue, before = result.Cents, after = colorChecked.Cents, colorChecked.Note });
+                    result = colorChecked;
+                }
+            }
+
             if (result is not null) results[coin.Id] = result;
             progress?.Report((++done, todo.Count));
         }
 
         // controllo del diametro su tutte le monete classificate della sessione, incluse quelle di passate precedenti
         var items = coins.Where(c => c.State != CoinState.Rejected && !c.IsManual)
-            .Select(c => results.TryGetValue(c.Id, out var r) ? new DiameterCheck.Item(c.Id, c.Diameter, r)
+            .Select(c => results.TryGetValue(c.Id, out var r) ? new DiameterCheck.Item(c.Id, c.Diameter, r, c.X + c.Width / 2, c.Y + c.Height / 2)
                 : c.Cents is { } cents && c.State != CoinState.Detected
                     ? new DiameterCheck.Item(c.Id, c.Diameter, new CoinClassification(c.CorrectedCents ?? cents,
-                        c.State == CoinState.Corrected ? 1f : c.ClassConfidence, Array.Empty<(int, float)>(), c.ClassifierId ?? ""))
+                        c.State == CoinState.Corrected ? 1f : c.ClassConfidence, Array.Empty<(int, float)>(), c.ClassifierId ?? ""),
+                        c.X + c.Width / 2, c.Y + c.Height / 2)
                     : null)
             .Where(i => i is not null).Cast<DiameterCheck.Item>().ToList();
         var checkedItems = DiameterCheck.Apply(items, session.PxPerMm).ToDictionary(i => i.CoinId);

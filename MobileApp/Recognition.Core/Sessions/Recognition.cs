@@ -76,16 +76,63 @@ public sealed class AiCropClassifier : ICoinClassifier
 }
 
 /// <summary>
+/// Controllo incrociato sul colore: il rame (1, 2, 5 cent) si distingue dall'oro (10, 20, 50 cent, e il centro di 2 euro)
+/// dalla tinta del ritaglio. Una moneta color oro letta come 1/2/5 cent (o una color rame letta come 10 cent o più) cambia
+/// taglio se un'altra ipotesi (secondo candidato, rilevatore) è compatibile con il colore; altrimenti perde confidenza.
+/// Le monete di tinta incerta (argento, riflessi) non si controllano.
+/// </summary>
+public static class ColorCheck
+{
+    public static bool IsCopperDenomination(int cents) => cents <= 5;
+
+    /// <param name="tint">"copper", "gold" o altro (nessun controllo).</param>
+    /// <param name="extra">Altre ipotesi (es. il taglio dato dal rilevatore nel fotogramma intero).</param>
+    public static CoinClassification Apply(CoinClassification c, string? tint, IEnumerable<(int Cents, float Score)>? extra = null)
+    {
+        if (tint is not (CoinColor.Copper or CoinColor.Gold)) return c;
+        var copper = tint == CoinColor.Copper;
+        bool Fits(int cents) => IsCopperDenomination(cents) == copper;
+        if (Fits(c.Cents)) return c;
+
+        var alternative = c.TopK.Concat(extra ?? Array.Empty<(int, float)>())
+            .Where(k => k.Cents != c.Cents && k.Score >= 0.05f && Fits(k.Cents) && EuroCoins.IsKnown(k.Cents))
+            .OrderByDescending(k => k.Score).Cast<(int Cents, float Score)?>().FirstOrDefault();
+        var name = copper ? "rame" : "oro";
+        if (alternative is { } alt)
+            return c with
+            {
+                Cents = alt.Cents,
+                Confidence = Math.Min(c.Confidence, Math.Max(alt.Score, 0.5f)),
+                Note = $"Taglio corretto con il colore ({name})"
+            };
+
+        return c with { Confidence = c.Confidence * 0.6f, Note = $"Colore incoerente: la moneta è color {name}" };
+    }
+}
+
+/// <summary>
 /// Controllo sul diametro relativo: nel mosaico tutte le monete hanno la stessa scala, quindi il rapporto tra i diametri
 /// misurati deve rispettare quello ufficiale. Una moneta incoerente perde confidenza, o passa al secondo taglio se quello
 /// torna con il diametro.
 /// </summary>
 public static class DiameterCheck
 {
+    /// <summary>Scala nota (ARCore): tolleranza stretta.</summary>
     public const double Tolerance = 0.07;
+
+    /// <summary>Scala locale (monete vicine): la prospettiva cambia poco da una moneta alla vicina.</summary>
+    public const double LocalTolerance = 0.09;
+
+    /// <summary>Scala stimata su tutta la superficie: se il telefono era inclinato il mosaico non ha scala uniforme, serve più margine.</summary>
+    public const double GlobalTolerance = 0.12;
+
     public const float ConfidentThreshold = 0.7f;
 
-    public sealed record Item(int CoinId, float DiameterPx, CoinClassification Classification);
+    /// <summary>Le monete a meno di questi diametri contano come "vicine" per la scala locale.</summary>
+    public const double NeighbourRadiusDiameters = 6;
+
+    /// <param name="X">Centro nel mosaico; NaN se non noto (si usa allora la scala di tutta la sessione).</param>
+    public sealed record Item(int CoinId, float DiameterPx, CoinClassification Classification, float X = float.NaN, float Y = float.NaN);
 
     public static double? EstimatePxPerMm(IEnumerable<Item> items)
     {
@@ -95,19 +142,42 @@ public static class DiameterCheck
         return ratios.Count < 3 ? null : ratios[ratios.Count / 2];
     }
 
+    /// <summary>Scala (px/mm) misurata sulle monete sicure vicine a questa (almeno due), o null se non ci sono o le posizioni non sono note.</summary>
+    public static double? LocalScale(Item item, IReadOnlyList<Item> items)
+    {
+        if (float.IsNaN(item.X) || float.IsNaN(item.Y)) return null;
+        var radius = NeighbourRadiusDiameters * item.DiameterPx;
+        var ratios = items
+            .Where(o => o.CoinId != item.CoinId && !float.IsNaN(o.X) && o.Classification.Confidence >= ConfidentThreshold && o.DiameterPx > 0 &&
+                        Math.Sqrt((o.X - item.X) * (o.X - item.X) + (o.Y - item.Y) * (o.Y - item.Y)) <= radius)
+            .Select(o => o.DiameterPx / EuroCoins.DiameterOf(o.Classification.Cents))
+            .OrderBy(r => r).ToList();
+        return ratios.Count < 2 ? null : ratios[ratios.Count / 2];
+    }
+
     public static IReadOnlyList<Item> Apply(IReadOnlyList<Item> items, double? knownPxPerMm = null)
     {
-        var scale = knownPxPerMm ?? EstimatePxPerMm(items);
-        if (scale is null or <= 0) return items;
+        var global = knownPxPerMm ?? EstimatePxPerMm(items);
+        if (global is null or <= 0) return items;
 
         return items.Select(item =>
         {
             var c = item.Classification;
-            var mm = item.DiameterPx / scale.Value;
-            double Error(int cents) => Math.Abs(mm - EuroCoins.DiameterOf(cents)) / EuroCoins.DiameterOf(cents);
-            if (Error(c.Cents) <= Tolerance) return item;
 
-            var alternative = c.TopK.Where(k => k.Cents != c.Cents && k.Score >= 0.15f && Error(k.Cents) <= Tolerance * 0.6)
+            // scala nota > scala delle monete vicine > scala di tutta la sessione
+            var scale = global.Value;
+            var tolerance = knownPxPerMm is null ? GlobalTolerance : Tolerance;
+            if (knownPxPerMm is null && LocalScale(item, items) is { } local)
+            {
+                scale = local;
+                tolerance = LocalTolerance;
+            }
+
+            var mm = item.DiameterPx / scale;
+            double Error(int cents) => Math.Abs(mm - EuroCoins.DiameterOf(cents)) / EuroCoins.DiameterOf(cents);
+            if (Error(c.Cents) <= tolerance) return item;
+
+            var alternative = c.TopK.Where(k => k.Cents != c.Cents && k.Score >= 0.15f && Error(k.Cents) <= tolerance * 0.6)
                 .OrderByDescending(k => k.Score).Cast<(int Cents, float Score)?>().FirstOrDefault();
             if (alternative is { } alt)
                 return item with

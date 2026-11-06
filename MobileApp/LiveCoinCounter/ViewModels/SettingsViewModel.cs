@@ -149,6 +149,48 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
+    public IReadOnlyList<SettingOption<bool>> SurfaceStyles { get; } = new[]
+    {
+        new SettingOption<bool>(true, "Piano di colore",
+            "La superficie acquisita è un piano grigio ardesia con sopra solo le monete: niente ombre del telefono né cuciture."),
+        new SettingOption<bool>(false, "Foto del tavolo",
+            "Mostra la foto reale del tavolo: utile per controllare l'allineamento dei fotogrammi.")
+    };
+
+    public SettingOption<bool> SelectedSurfaceStyle
+    {
+        get => SurfaceStyles.First(o => o.Value == SettingsService.SolidSurface);
+        set
+        {
+            if (value is null) return;
+            SettingsService.SolidSurface = value.Value;
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<SettingOption<GridSpacing>> GridSpacings { get; } = new[]
+    {
+        new SettingOption<GridSpacing>(GridSpacing.Off, "Nessuna", "Senza griglia."),
+        new SettingOption<GridSpacing>(GridSpacing.Cm1, "Ogni 1 cm", "Griglia fitta per misurare le monete; i numeri compaiono ogni 5 cm."),
+        new SettingOption<GridSpacing>(GridSpacing.Cm2, "Ogni 2 cm", "Griglia media; i numeri compaiono ogni 10 cm."),
+        new SettingOption<GridSpacing>(GridSpacing.Cm5, "Ogni 5 cm", "Griglia larga; i numeri compaiono ogni 10 cm."),
+        new SettingOption<GridSpacing>(GridSpacing.Cm10, "Ogni 10 cm", "Solo i riferimenti principali.")
+    };
+
+    public SettingOption<GridSpacing> SelectedGridSpacing
+    {
+        get => GridSpacings.First(o => o.Value == SettingsService.GridSpacing);
+        set
+        {
+            if (value is null) return;
+            SettingsService.GridSpacing = value.Value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string GridNote =>
+        "La griglia ha la scala esatta con ARCore; con OpenCV la scala si stima dalle monete riconosciute (almeno 3) ed è indicativa: se il telefono era inclinato, cambia da un punto all'altro.";
+
     public IReadOnlyList<SettingOption<RetentionMode>> RetentionModes { get; } = new[]
     {
         new SettingOption<RetentionMode>(RetentionMode.MosaicAndCrops, "Mosaico e ritagli",

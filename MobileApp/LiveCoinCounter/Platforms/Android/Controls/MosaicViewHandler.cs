@@ -47,6 +47,12 @@ public sealed class MosaicPlatformView : AView
     private readonly APaint _quadPaint = new() { AntiAlias = true, Color = AColor.White };
     private readonly APaint _textPaint = new() { AntiAlias = true, Color = AColor.Argb(200, 255, 255, 255), TextAlign = APaint.Align.Center };
     private IReadOnlyList<OverlayBox> _boxes = Array.Empty<OverlayBox>();
+    private bool _solid;
+    private int _styleKey;
+    private float _gridPxPerCm;
+    private int _gridCm = 1;
+    private string _gridLabel = string.Empty;
+    private readonly APaint _gridPaint = new() { AntiAlias = true };
     private Quad? _quad;
     private Quad? _ghost;
     private Mosaic.RectF _bounds;
@@ -74,13 +80,25 @@ public sealed class MosaicPlatformView : AView
         _quad = view.FrameQuad;
         _ghost = view.GhostQuad;
         _emptyText = view.EmptyText;
+        _gridPxPerCm = view.GridPxPerCm;
+        _gridCm = Math.Max(1, view.GridCm);
+        _gridLabel = view.GridLabel;
         var canvas = view.Source;
         if (canvas is not null)
         {
-            var keys = changed ?? canvas.Keys;
-            foreach (var (key, version, pixels) in canvas.Snapshot(keys))
+            // il piano di colore dipende anche dalle monete: se cambiano (o cambia lo stile) si ridisegnano tutte le tessere
+            var solid = view.SolidSurface;
+            var style = solid ? HashCode.Combine(view.SurfaceColor, StyleKey(_boxes)) : 0;
+            var force = solid != _solid || style != _styleKey;
+            _solid = solid;
+            _styleKey = style;
+
+            var keys = force ? canvas.Keys : changed ?? canvas.Keys;
+            var snapshot = solid ? canvas.SnapshotSurface(keys, view.SurfaceColor, _boxes.Select(b => b.Box).ToList()) : canvas.Snapshot(keys);
+            foreach (var (key, version, pixels) in snapshot)
             {
-                if (_tiles.TryGetValue(key, out var existing) && existing.Version == version) continue;
+                _tiles.TryGetValue(key, out var existing);
+                if (!force && existing.Bitmap is not null && existing.Version == version) continue;
                 var bitmap = existing.Bitmap ?? Bitmap.CreateBitmap(MosaicCanvas.TileSize, MosaicCanvas.TileSize, Bitmap.Config.Argb8888!)!;
                 bitmap.SetPixels(pixels, 0, MosaicCanvas.TileSize, 0, 0, MosaicCanvas.TileSize, MosaicCanvas.TileSize);
                 _tiles[key] = (version, bitmap);
@@ -100,6 +118,19 @@ public sealed class MosaicPlatformView : AView
             _preview = null;
         }
         Invalidate();
+    }
+
+    /// <summary>Impronta delle monete (posizione e misura in pixel interi): cambia solo quando cambia davvero qualcosa da ridisegnare.</summary>
+    private static int StyleKey(IReadOnlyList<OverlayBox> boxes)
+    {
+        var hash = new HashCode();
+        foreach (var b in boxes)
+        {
+            hash.Add((int)Math.Round(b.Box.X));
+            hash.Add((int)Math.Round(b.Box.Y));
+            hash.Add((int)Math.Round(b.Box.Width));
+        }
+        return hash.ToHashCode();
     }
 
     public void ResetZoom()
@@ -173,6 +204,8 @@ public sealed class MosaicPlatformView : AView
             canvas.DrawBitmap(bitmap, null, new global::Android.Graphics.RectF(x - 0.5f, y - 0.5f, x + MosaicCanvas.TileSize + 0.5f, y + MosaicCanvas.TileSize + 0.5f), _tilePaint);
         }
 
+        DrawGrid(canvas, content, density, scale);
+
         _boxPaint.StrokeWidth = 2.5f * density / scale;
         _labelPaint.TextSize = 12 * density / scale;
         foreach (var box in _boxes)
@@ -221,7 +254,52 @@ public sealed class MosaicPlatformView : AView
         }
         canvas.Restore();
 
+        // legenda della griglia (fuori dal mosaico, sempre leggibile)
+        if (_gridLabel.Length > 0)
+        {
+            _textPaint.TextAlign = APaint.Align.Left;
+            _textPaint.TextSize = 12 * density;
+            canvas.DrawText(_gridLabel, 16 * density, Height - 150 * density, _textPaint);
+            _textPaint.TextAlign = APaint.Align.Center;
+            _textPaint.TextSize = 16 * density;
+        }
+
         DrawPreview(canvas, density);
+    }
+
+    /// <summary>
+    /// Griglia metrica sul mosaico, ancorata all'origine del mosaico (non si sposta quando la superficie cresce): una riga ogni
+    /// <see cref="_gridCm"/> cm, più marcata ogni 5 righe se il passo è 1 cm o 2 cm (5 e 10 cm), o ogni 2 se è 5 cm.
+    /// </summary>
+    private void DrawGrid(Canvas canvas, Mosaic.RectF content, float density, float scale)
+    {
+        if (_gridPxPerCm <= 0) return;
+        var step = _gridPxPerCm * _gridCm;
+        // sotto i 6 px sullo schermo la griglia diventa una macchia: si salta una riga su due finché non torna leggibile
+        var skip = 1;
+        while (step * skip * scale < 6 * density && skip < 64) skip *= 2;
+        step *= skip;
+        var major = _gridCm switch { 1 => 5, 2 => 5, 5 => 2, _ => 1 };
+
+        _gridPaint.SetStyle(APaint.Style.Stroke);
+        var firstX = (int)Math.Floor(content.X / step);
+        var lastX = (int)Math.Ceiling(content.Right / step);
+        var firstY = (int)Math.Floor(content.Y / step);
+        var lastY = (int)Math.Ceiling(content.Bottom / step);
+        for (var i = firstX; i <= lastX; i++)
+        {
+            var isMajor = i % major == 0;
+            _gridPaint.Color = AColor.Argb(isMajor ? 150 : 70, 255, 255, 255);
+            _gridPaint.StrokeWidth = (isMajor ? 1.4f : 0.7f) * density / scale;
+            canvas.DrawLine(i * step, (float)content.Y, i * step, (float)content.Bottom, _gridPaint);
+        }
+        for (var j = firstY; j <= lastY; j++)
+        {
+            var isMajor = j % major == 0;
+            _gridPaint.Color = AColor.Argb(isMajor ? 150 : 70, 255, 255, 255);
+            _gridPaint.StrokeWidth = (isMajor ? 1.4f : 0.7f) * density / scale;
+            canvas.DrawLine((float)content.X, j * step, (float)content.Right, j * step, _gridPaint);
+        }
     }
 
     private static global::Android.Graphics.Path QuadPath(Quad quad)

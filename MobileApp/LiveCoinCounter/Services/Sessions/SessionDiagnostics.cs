@@ -79,6 +79,7 @@ public static class SessionDiagnostics
                     diameterPx = c.Diameter,
                     detection = new { confidence = c.DetectionConfidence, observations = c.Observations, sourceKeyframe = c.SourceKeyframe },
                     detector = new { cents = c.DetectorCents, confidence = c.DetectorClassConfidence },
+                    color = new { tint = c.ColorTint, hue = c.ColorHue, sat = c.ColorSat },
                     result = new { cents = c.Cents, confidence = c.ClassConfidence, second = c.SecondCents, secondScore = c.SecondScore, classifier = c.ClassifierId, note = c.Note },
                     effectiveCents = c.EffectiveCents,
                     truth = new { verified = c.Verified, kind = c.TruthKind, correctedCents = c.CorrectedCents, note = c.TruthNote, manual = c.IsManual },

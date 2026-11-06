@@ -27,6 +27,8 @@ public sealed class CaptureViewModel : ObservableObject
     private volatile TrackingUpdate? _lastTracking;
     private volatile bool _coinsChanged;
     private string? _loggedHint;
+    private bool _scaleDirty = true;
+    private SurfaceScale? _gridScale;
     private bool _torchOn;
     private long _lastRefocusTick;
     private volatile string? _lastError;
@@ -186,6 +188,8 @@ public sealed class CaptureViewModel : ObservableObject
         Hint = null;
         _loggedHint = null;
         _lastError = null;
+        _gridScale = null;
+        _scaleDirty = true;
         _torchOn = false;
         OnPropertyChanged(nameof(TorchSymbol));
         while (_changedTiles.TryDequeue(out _)) { }
@@ -223,7 +227,12 @@ public sealed class CaptureViewModel : ObservableObject
             var tracks = engine.Coins.Tracks;
             _view.Boxes = tracks.Select(t => new OverlayBox(t.MosaicBox, t.IsStable)).ToList();
             CoinCount = tracks.Count;
+            _scaleDirty = true;
         }
+
+        // aspetto della superficie e griglia metrica (impostazioni)
+        _view.SolidSurface = SettingsService.SolidSurface;
+        UpdateGrid(engine);
 
         if (_lastTracking is { } update)
         {
@@ -261,6 +270,40 @@ public sealed class CaptureViewModel : ObservableObject
         }
 
         _view.Refresh(changed.Count > 0 ? changed.ToList() : Array.Empty<TileKey>());
+    }
+
+    /// <summary>
+    /// Griglia metrica: serve la scala. Con ARCore è misurata; con OpenCV si stima dalle monete riconosciute (almeno 3) e si
+    /// riaggiorna quando ne arrivano di nuove. Finché non è nota la legenda lo dice.
+    /// </summary>
+    private void UpdateGrid(CaptureEngine engine)
+    {
+        var spacing = SettingsService.GridSpacing;
+        if (_view is null) return;
+        if (spacing == GridSpacing.Off)
+        {
+            _view.GridPxPerCm = 0;
+            _view.GridLabel = string.Empty;
+            return;
+        }
+
+        if (_scaleDirty || engine.PxPerMm is not null)
+        {
+            _scaleDirty = false;
+            _gridScale = SurfaceScale.FromTracks(engine.PxPerMm, engine.Coins.Tracks);
+        }
+
+        _view.GridCm = (int)spacing;
+        if (_gridScale is { } scale)
+        {
+            _view.GridPxPerCm = (float)(scale.PxPerMm * 10);
+            _view.GridLabel = $"Griglia {(int)spacing} cm · {scale.Label}";
+        }
+        else
+        {
+            _view.GridPxPerCm = 0;
+            _view.GridLabel = "Griglia: scala non ancora nota (servono almeno 3 monete riconosciute)";
+        }
     }
 
     private async Task StopAsync()

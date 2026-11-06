@@ -56,6 +56,32 @@ public class MosaicTests
     }
 
     [Fact]
+    public void Anchors_keep_tracking_along_a_long_path_without_mosaic_keyframes()
+    {
+        var scene = new SyntheticScene(2400, 1000, seed: 21);
+        var tracker = new FeatureMosaicTracker(new OrbLite(), new FeatureTrackerOptions { MosaicScale = 1 });
+        var start = SyntheticScene.View(400, 400, W, H);
+        var first = tracker.Process(new CameraFrame(scene.Render(start, W, H), 0, 0));
+        tracker.CommitKeyframe(first.FrameToMosaic!.Value);       // l'unico fotogramma chiave del mosaico
+        var tableToMosaic = first.FrameToMosaic.Value * start.Inverse();
+
+        // 1400 px di percorso a passi di 70 px: senza ancoraggi il primo fotogramma chiave si perde dopo pochi passi
+        var anchors = 0;
+        for (var step = 1; step <= 20; step++)
+        {
+            var view = SyntheticScene.View(400 + step * 70, 400 + (step % 3) * 10, W, H, degrees: Math.Sin(step) * 2);
+            var result = tracker.Process(new CameraFrame(scene.Render(view, W, H), step, 0));
+
+            Assert.True(result.FrameToMosaic is not null, $"perso al passo {step}: {result.Detail?.Reason} {string.Join(" ", result.Detail?.Attempts.Select(a => a.Outcome) ?? Array.Empty<string>())}");
+            if (result.Detail?.AnchorAdded == true) anchors++;
+            var (ex, ey) = (tableToMosaic * view).Apply(W / 2.0, H / 2.0);
+            var (ax, ay) = result.FrameToMosaic!.Value.Apply(W / 2.0, H / 2.0);
+            Assert.True(Math.Abs(ex - ax) < 15 && Math.Abs(ey - ay) < 15, $"passo {step}: atteso ({ex:0},{ey:0}), trovato ({ax:0},{ay:0})");
+        }
+        Assert.True(anchors >= 3, $"ancoraggi aggiunti: {anchors}");
+    }
+
+    [Fact]
     public void Tracker_reports_lost_on_unrelated_image_and_relocalizes()
     {
         var scene = new SyntheticScene(1200, 900, seed: 9);
@@ -107,6 +133,29 @@ public class MosaicTests
         Assert.Equal(ImageOps.Argb(0, 0, 255), At(250, 100));      // sovrapposizione: vince il fotogramma migliore
         Assert.Equal(ImageOps.Argb(0, 0, 255), At(420, 100));      // solo il blu
         Assert.InRange(canvas.Bounds.Width, 449, 451);
+    }
+
+    [Fact]
+    public void Surface_mode_shows_a_solid_plane_with_only_the_coins_in_photo()
+    {
+        var canvas = new MosaicCanvas();
+        var photo = ImageOps.Argb(200, 30, 30);
+        var plane = ImageOps.Argb(60, 65, 75);
+        canvas.Compose(new ArgbImage(300, 200, Enumerable.Repeat(photo, 300 * 200).ToArray()), Homography.Identity, 1f);
+        var coins = new[] { new RectF(100, 50, 60, 60) };     // cerchio al centro (130, 80), raggio ~31
+
+        var image = canvas.Render(4096, out _, out var origin, plane, coins)!;
+        int At(int x, int y) => image[(int)(x - origin.X), (int)(y - origin.Y)];
+
+        Assert.Equal(photo, At(130, 80));      // dentro la moneta: la foto
+        Assert.Equal(plane, At(20, 20));       // fuori: il piano
+        Assert.Equal(plane, At(101, 51));      // angolo del riquadro, fuori dal cerchio
+        Assert.Equal(photo, canvas.Render(4096, out _, out _)![130 - (int)origin.X, 80 - (int)origin.Y]);   // senza stile resta la foto
+
+        var tile = canvas.SnapshotSurface(null, plane, coins).Single(t => t.Key == new TileKey(0, 0)).Pixels;
+        Assert.Equal(photo, tile[80 * MosaicCanvas.TileSize + 130]);
+        Assert.Equal(plane, tile[20 * MosaicCanvas.TileSize + 20]);
+        Assert.Equal(0, tile[220 * MosaicCanvas.TileSize + 20]);           // fuori dall'area acquisita: trasparente
     }
 
     [Fact]

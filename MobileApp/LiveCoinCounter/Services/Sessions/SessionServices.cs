@@ -61,6 +61,12 @@ public static class SessionServices
     public static async Task<byte[]?> LoadCropAsync(CoinRecord coin) =>
         coin.CropPath is { } path && File.Exists(path) ? await File.ReadAllBytesAsync(path) : null;
 
+    /// <summary>La scala della superficie: misurata (ARCore) o stimata dalle monete riconosciute con sicurezza (almeno 3); null se non si può.</summary>
+    public static SurfaceScale? ScaleOf(SessionRecord session, IReadOnlyList<CoinRecord> coins) =>
+        SurfaceScale.From(session.PxPerMm, coins
+            .Where(c => !c.IsManual && c.State != CoinState.Rejected && c.EffectiveCents is not null)
+            .Select(c => (c.Diameter, c.EffectiveCents!.Value, c.State == CoinState.Corrected || c.Verified ? 1f : c.ClassConfidence)));
+
     /// <summary>Riscrive <c>session.json</c> nella cartella della sessione (dopo lo stop, la classificazione e ogni correzione).</summary>
     public static Task WriteSnapshotAsync(string sessionId) => SessionDiagnostics.WriteSnapshotAsync(Repository, sessionId);
 

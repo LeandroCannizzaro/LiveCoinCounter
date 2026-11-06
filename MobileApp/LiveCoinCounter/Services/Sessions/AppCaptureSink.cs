@@ -17,6 +17,7 @@ public sealed class AppCaptureSink : ICaptureSink
     private readonly SessionRepository _repository;
     private readonly HashSet<int> _withCrop = new();
     private readonly Dictionary<int, DateTime> _detectedAt = new();
+    private readonly Dictionary<int, CoinColor> _colors = new();
     private readonly Channel<CameraFrame>? _debugFrames;
     private readonly Task? _debugWriter;
     private long _lastDebugFrame = long.MinValue;
@@ -67,6 +68,8 @@ public sealed class AppCaptureSink : ICaptureSink
                 _withCrop.Add(t.Id);
             }
             if (!_detectedAt.ContainsKey(t.Id)) _detectedAt[t.Id] = DateTime.Now;
+            if (change.Color is { } color) _colors[t.Id] = color;     // il colore è quello del ritaglio salvato
+            _colors.TryGetValue(t.Id, out var coinColor);
 
             records.Add(new CoinRecord
             {
@@ -82,7 +85,10 @@ public sealed class AppCaptureSink : ICaptureSink
                 State = CoinState.Detected,
                 DetectorCents = t.DetectorCents,
                 DetectorClassConfidence = t.DetectorClassConfidence,
-                DetectedAt = _detectedAt[t.Id]
+                DetectedAt = _detectedAt[t.Id],
+                ColorTint = coinColor?.Guess,
+                ColorHue = coinColor?.CoreHue ?? 0,
+                ColorSat = coinColor?.CoreSat ?? 0
             });
         }
         await _repository.UpsertCoinsAsync(_session.Id, records);

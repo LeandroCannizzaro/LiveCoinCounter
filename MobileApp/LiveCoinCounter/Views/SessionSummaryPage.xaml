@@ -116,7 +116,16 @@
             <Label Text="SUPERFICIE ACQUISITA" FontSize="11" FontAttributes="Bold" CharacterSpacing="1" IsVisible="{Binding HasMosaic}"
                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
             <Border IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" BackgroundColor="#121214">
-                <Image Source="{Binding MosaicImage}" Aspect="AspectFit" />
+                <Grid>
+                    <Image Source="{Binding MosaicImage}" Aspect="AspectFit">
+                        <Image.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding OpenSurfaceCommand}" />
+                        </Image.GestureRecognizers>
+                    </Image>
+                    <Button Text="⤢ Schermo intero" Command="{Binding OpenSurfaceCommand}" HorizontalOptions="End" VerticalOptions="Start"
+                            Margin="8" Padding="12,4" HeightRequest="36" CornerRadius="18" FontSize="12" TextColor="White" BackgroundColor="#99000000"
+                            SemanticProperties.Description="Apri la superficie acquisita a tutto schermo per ingrandirla" />
+                </Grid>
             </Border>
 
             <Label Text="{Binding MethodText}" FontSize="11" HorizontalTextAlignment="Center"

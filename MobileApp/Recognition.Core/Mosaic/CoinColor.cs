@@ -1,23 +1,23 @@
 namespace LiveCoinCounter.Mosaic;
 
 /// <summary>
-/// Colore medio di una moneta in tinta (0–360°), saturazione e luminosità (0–1), separato per il centro e per l'anello
-/// esterno: le monete bimetalliche (1 e 2 euro) hanno due colori diversi, le altre uno solo. Serve per distinguere i tre
-/// gruppi (rame: 1, 2, 5 cent; oro nordico: 10, 20, 50 cent; bimetalliche) e finora si registra soltanto nel diario di debug.
+/// Colore medio di una moneta in tinta (0–360°), saturazione e luminosità (0–1), per il centro e per l'anello esterno.
+/// Il gruppo si deduce dalla sola tinta del centro: nelle prove sul campo il rame (1, 2, 5 cent) stava tra 19° e 32°, l'oro
+/// nordico (10, 20, 50 cent) tra 39° e 43°. L'anello non è affidabile: il ritaglio include un po' di tavolo e di bordo.
 /// </summary>
 public sealed record CoinColor(double CoreHue, double CoreSat, double CoreVal, double RingHue, double RingSat, double RingVal)
 {
-    /// <summary>Gruppo dedotto dal colore, "?" se la tinta non è affidabile (poca saturazione: argento o riflesso).</summary>
+    public const string Copper = "copper";
+    public const string Gold = "gold";
+
+    /// <summary>"copper", "gold" oppure "?" se la tinta non è affidabile (poca saturazione: argento, riflesso, tinta di mezzo).</summary>
     public string Guess
     {
         get
         {
-            // bimetalliche: centro e anello hanno saturazione molto diversa (argento contro oro) o tinte diverse
-            var hueGap = Math.Abs(CoreHue - RingHue);
-            hueGap = Math.Min(hueGap, 360 - hueGap);
-            if (Math.Abs(CoreSat - RingSat) > 0.15 || (hueGap > 25 && CoreSat > 0.12 && RingSat > 0.12)) return "bimetal";
-            if (CoreSat < 0.12) return "?";
-            return CoreHue is < 30 or > 340 ? "copper" : CoreHue <= 65 ? "gold" : "?";
+            if (CoreSat < 0.25) return "?";
+            if (CoreHue is < 35 or > 340) return Copper;
+            return CoreHue is >= 37 and <= 60 ? Gold : "?";
         }
     }
 }

@@ -16,6 +16,19 @@ public class MosaicView : View
     public IReadOnlyList<OverlayBox> Boxes { get; set; } = Array.Empty<OverlayBox>();
     public Quad? FrameQuad { get; set; }
 
+    /// <summary>Superficie come piano di colore (<see cref="SurfaceColor"/>) con solo le monete in foto, invece della foto del tavolo.</summary>
+    public bool SolidSurface { get; set; }
+
+    /// <summary>Colore ARGB del piano (vedi <see cref="MosaicCanvas.DefaultSurfaceColor"/>).</summary>
+    public int SurfaceColor { get; set; } = MosaicCanvas.DefaultSurfaceColor;
+
+    /// <summary>Griglia metrica: pixel del mosaico per centimetro (0 = nessuna griglia) e passo in cm.</summary>
+    public float GridPxPerCm { get; set; }
+    public int GridCm { get; set; } = 1;
+
+    /// <summary>Scritta della legenda della griglia (es. «Griglia 1 cm · scala stimata»).</summary>
+    public string GridLabel { get; set; } = string.Empty;
+
     /// <summary>Ultima zona in cui il tracking era valido, mostrata (in arancione) solo quando la posizione è persa.</summary>
     public Quad? GhostQuad { get; set; }
 

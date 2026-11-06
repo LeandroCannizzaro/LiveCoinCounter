@@ -118,12 +118,18 @@ public sealed class CaptureController
 
         var repository = SessionServices.Repository;
         var session = await repository.GetSessionAsync(Session.Id) ?? Session;
+        // la foto reale si salva sempre; il file mostrato è il piano di colore con le monete (impostazione "Superficie acquisita")
+        var coinBoxes = Engine.Coins.Tracks.Select(t => t.MosaicBox).ToList();
         var mosaic = await Task.Run(() => Engine.Canvas.Render(4096, out var scale, out var origin) is { } image
             ? (image, scale, origin)
             : ((ArgbImage, float, PointD)?)null);
         if (mosaic is { } m)
         {
-            await AndroidImaging.SaveJpegAsync(m.Item1, SessionStorage.MosaicPath(session.Id), 88);
+            await AndroidImaging.SaveJpegAsync(m.Item1, SessionStorage.MosaicPhotoPath(session.Id), 88);
+            var shown = SettingsService.SolidSurface
+                ? await Task.Run(() => Engine.Canvas.Render(4096, out _, out _, MosaicCanvas.DefaultSurfaceColor, coinBoxes))
+                : null;
+            await AndroidImaging.SaveJpegAsync(shown ?? m.Item1, SessionStorage.MosaicPath(session.Id), 90);
             session.MosaicPreviewPath = SessionStorage.MosaicPath(session.Id);
             session.PreviewScale = m.Item2;
             session.PreviewOriginX = m.Item3.X;

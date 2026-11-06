@@ -97,10 +97,10 @@ public class DiagLogTests : IDisposable
     }
 
     [Fact]
-    public void Coin_color_recognizes_two_tone_coins()
+    public void Coin_color_is_unsure_for_silver_and_for_in_between_hues()
     {
-        var coin = SolidCoin(ImageOps.Argb(215, 175, 70), ImageOps.Argb(185, 190, 195));   // centro oro, anello argento
-        Assert.Equal("bimetal", CoinColorAnalysis.Analyze(coin).Guess);
+        Assert.Equal("?", CoinColorAnalysis.Analyze(SolidCoin(ImageOps.Argb(190, 195, 200), ImageOps.Argb(190, 195, 200))).Guess);   // argento
+        Assert.Equal("gold", CoinColorAnalysis.Analyze(SolidCoin(ImageOps.Argb(215, 175, 70), ImageOps.Argb(185, 190, 195))).Guess);   // 2€: centro oro
     }
 
     private static ArgbImage SolidCoin(int core, int ring)

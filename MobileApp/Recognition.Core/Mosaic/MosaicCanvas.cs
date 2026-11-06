@@ -140,9 +140,58 @@ public sealed class MosaicCanvas
 
     public IReadOnlyList<TileKey> Keys { get { lock (_sync) return _tiles.Keys.ToList(); } }
 
-    /// <summary>Immagine unica del mosaico ridotta a lato massimo <paramref name="maxSide"/>. Le zone vuote sono nere.</summary>
-    public ArgbImage? Render(int maxSide, out float scale, out PointD origin)
+    /// <summary>Colore predefinito del piano della superficie: grigio ardesia, con buon contrasto sia con il rame sia con l'argento.</summary>
+    public static readonly int DefaultSurfaceColor = ImageOps.Argb(0x3A, 0x41, 0x4B);
+
+    /// <summary>Un cerchio per moneta (centro e raggio al quadrato), leggermente più largo del riquadro per non tagliare il bordo.</summary>
+    private static List<(double X, double Y, double R2)> CoinCircles(IReadOnlyList<RectF>? coins) =>
+        coins?.Select(c => (X: (double)c.CenterX, Y: (double)c.CenterY, R2: Math.Pow(c.Diameter / 2 * 1.04, 2))).ToList() ?? new();
+
+    private static bool InsideAny(List<(double X, double Y, double R2)> circles, double x, double y)
     {
+        foreach (var c in circles)
+            if ((x - c.X) * (x - c.X) + (y - c.Y) * (y - c.Y) <= c.R2) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Come <see cref="Snapshot"/>, ma con il piano al posto della foto: dove il mosaico ha contenuto il pixel diventa
+    /// <paramref name="surfaceArgb"/>, tranne dentro i cerchi delle monete, dove resta la foto. Fuori dall'area acquisita il pixel è trasparente (0).
+    /// </summary>
+    public List<(TileKey Key, int Version, int[] Pixels)> SnapshotSurface(IEnumerable<TileKey>? keys, int surfaceArgb, IReadOnlyList<RectF> coins)
+    {
+        var circles = CoinCircles(coins);
+        lock (_sync)
+        {
+            var source = keys is null ? _tiles.Values.ToList() : keys.Where(_tiles.ContainsKey).Select(k => _tiles[k]).ToList();
+            var result = new List<(TileKey, int, int[])>(source.Count);
+            foreach (var tile in source)
+            {
+                int originX = tile.Key.X * TileSize, originY = tile.Key.Y * TileSize;
+                var near = circles.Where(c => c.X + Math.Sqrt(c.R2) >= originX && c.X - Math.Sqrt(c.R2) <= originX + TileSize &&
+                                              c.Y + Math.Sqrt(c.R2) >= originY && c.Y - Math.Sqrt(c.R2) <= originY + TileSize).ToList();
+                var pixels = new int[tile.Pixels.Length];
+                for (var y = 0; y < TileSize; y++)
+                for (var x = 0; x < TileSize; x++)
+                {
+                    var i = y * TileSize + x;
+                    if (tile.Weights[i] == 0) continue;
+                    pixels[i] = near.Count > 0 && InsideAny(near, originX + x + 0.5, originY + y + 0.5) ? tile.Pixels[i] : surfaceArgb;
+                }
+                result.Add((tile.Key, tile.Version, pixels));
+            }
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Immagine unica del mosaico ridotta a lato massimo <paramref name="maxSide"/>. Le zone vuote sono nere.
+    /// Con <paramref name="surfaceArgb"/> la superficie acquisita è un piano di quel colore con solo le monete (cerchi in
+    /// <paramref name="coins"/>) in foto; senza, è la foto intera.
+    /// </summary>
+    public ArgbImage? Render(int maxSide, out float scale, out PointD origin, int? surfaceArgb = null, IReadOnlyList<RectF>? coins = null)
+    {
+        var circles = CoinCircles(coins);
         lock (_sync)
         {
             scale = 1;
@@ -169,7 +218,9 @@ public sealed class MosaicCanvas
                 var key = new TileKey(FloorDiv(mx), FloorDiv(my));
                 if (!_tiles.TryGetValue(key, out var tile)) { image.Pixels[y * w + x] = black; continue; }
                 var i = (my - key.Y * TileSize) * TileSize + (mx - key.X * TileSize);
-                image.Pixels[y * w + x] = tile.Weights[i] == 0 ? black : tile.Pixels[i];
+                if (tile.Weights[i] == 0) image.Pixels[y * w + x] = black;
+                else if (surfaceArgb is { } surface && !InsideAny(circles, mx + 0.5, my + 0.5)) image.Pixels[y * w + x] = surface;
+                else image.Pixels[y * w + x] = tile.Pixels[i];
             }
             return image;
         }

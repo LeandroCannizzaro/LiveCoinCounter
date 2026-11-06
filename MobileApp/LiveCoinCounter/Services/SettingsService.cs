@@ -37,6 +37,23 @@ public static class SettingsService
         set => Preferences.Default.Set("capture_method", value.ToString());
     }
 
+    /// <summary>
+    /// Aspetto della superficie acquisita: piano di colore con solo le monete in foto (predefinito) oppure la foto intera
+    /// del tavolo (utile per controllare le cuciture e il tracking). Il file della foto si salva comunque nella sessione.
+    /// </summary>
+    public static bool SolidSurface
+    {
+        get => Preferences.Default.Get("solid_surface", true);
+        set => Preferences.Default.Set("solid_surface", value);
+    }
+
+    /// <summary>Griglia metrica sulla superficie: nessuna (predefinito) o a passo di 1, 2, 5, 10 cm. Serve una scala nota o stimabile.</summary>
+    public static GridSpacing GridSpacing
+    {
+        get => Enum.TryParse<GridSpacing>(Preferences.Default.Get("grid_spacing", nameof(GridSpacing.Off)), out var v) ? v : GridSpacing.Off;
+        set => Preferences.Default.Set("grid_spacing", value.ToString());
+    }
+
     /// <summary>Cosa conservare a fine sessione. Predefinito: mosaico e ritagli.</summary>
     public static RetentionMode Retention
     {

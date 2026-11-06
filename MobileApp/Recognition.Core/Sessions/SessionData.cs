@@ -132,6 +132,11 @@ public sealed class CoinRecord
     /// <summary>Moneta aggiunta a mano perché il rilevatore non l'ha trovata: non ha posizione né ritaglio.</summary>
     public bool IsManual { get; set; }
 
+    /// <summary>Colore del ritaglio: "copper", "gold" o "?" (vedi <see cref="Mosaic.CoinColor"/>), con tinta e saturazione del centro.</summary>
+    public string? ColorTint { get; set; }
+    public double ColorHue { get; set; }
+    public double ColorSat { get; set; }
+
     /// <summary>Il valore che conta: la correzione dell'utente vince sempre; le monete scartate valgono zero.</summary>
     [Ignore] public int? EffectiveCents => State == CoinState.Rejected ? null : CorrectedCents ?? Cents;
 

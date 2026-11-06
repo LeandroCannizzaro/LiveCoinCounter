@@ -39,6 +39,9 @@ public static class SessionStorage
 
     public static string MosaicPath(string sessionId) => Path.Combine(Folder(sessionId), "mosaic.jpg");
 
+    /// <summary>Il mosaico con la foto reale del tavolo (si salva sempre, anche quando l'impostazione mostra il piano di colore).</summary>
+    public static string MosaicPhotoPath(string sessionId) => Path.Combine(Folder(sessionId), "mosaic_photo.jpg");
+
     /// <summary>Registro diagnostico della sessione: un evento JSON per riga.</summary>
     public static string DiagnosticsPath(string sessionId) => Path.Combine(Folder(sessionId), "diagnostics.jsonl");
 

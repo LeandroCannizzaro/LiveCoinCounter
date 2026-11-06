@@ -41,6 +41,41 @@ public class CoinRegistryTests
         Assert.Equal(usable, DetectionFilter.IsUsable(new RectF(x, y, w, h), 640, 480));
 }
 
+public class ColorCheckTests
+{
+    private static CoinClassification Read(int cents, float conf, params (int, float)[] topK) =>
+        new(cents, conf, topK.Length == 0 ? new[] { (cents, conf) } : topK, "test");
+
+    [Fact]
+    public void A_gold_coin_read_as_copper_takes_the_compatible_second_choice()
+    {
+        // il caso reale: 10 centesimi (oro) letto come 2 centesimi con 0,87; il rilevatore dice 10
+        var result = ColorCheck.Apply(Read(2, 0.87f, (2, 0.87f), (5, 0.03f)), "gold", extra: new[] { (10, 0.8f) });
+        Assert.Equal(10, result.Cents);
+        Assert.Contains("colore", result.Note);
+    }
+
+    [Fact]
+    public void Without_a_compatible_alternative_confidence_drops()
+    {
+        var result = ColorCheck.Apply(Read(2, 0.87f), "gold");
+        Assert.Equal(2, result.Cents);
+        Assert.InRange(result.Confidence, 0.5f, 0.53f);
+    }
+
+    [Theory]
+    [InlineData(10, "gold")]
+    [InlineData(200, "gold")]     // il centro di 2 euro è color oro
+    [InlineData(2, "copper")]
+    [InlineData(2, "?")]
+    [InlineData(2, null)]
+    public void Consistent_or_unsure_colors_change_nothing(int cents, string? tint)
+    {
+        var read = Read(cents, 0.9f);
+        Assert.Same(read, ColorCheck.Apply(read, tint));
+    }
+}
+
 public class DiameterCheckTests
 {
     private static DiameterCheck.Item Item(int id, float diameterPx, int cents, float conf, params (int, float)[] topK) =>
@@ -70,6 +105,34 @@ public class DiameterCheckTests
         Assert.Equal(1, c.Cents);
         Assert.True(c.Confidence < 0.55f);
         Assert.NotNull(c.Note);
+    }
+
+    [Fact]
+    public void Uses_the_scale_of_nearby_coins_when_the_phone_was_tilted()
+    {
+        static DiameterCheck.Item At(int id, float x, float diameterPx, int cents) =>
+            new(id, diameterPx, new CoinClassification(cents, 0.95f, new[] { (cents, 0.95f) }, "test"), x, 0);
+
+        // lato sinistro 2 px/mm, lato destro 3 px/mm (il telefono vedeva i due lati a distanze diverse): tutte giuste
+        var items = new[]
+        {
+            At(1, 0, 32.5f, 1), At(2, 90, 37.5f, 2), At(3, 180, 42.5f, 5),
+            At(4, 2000, 48.75f, 1), At(5, 2100, 77.25f, 200), At(6, 2200, 59.25f, 10)
+        };
+
+        var result = DiameterCheck.Apply(items);
+
+        Assert.All(result, i => Assert.True(i.Classification.Confidence >= 0.9f, $"moneta {i.CoinId}: {i.Classification.Note}"));
+    }
+
+    [Fact]
+    public void Still_flags_a_coin_that_does_not_fit_its_neighbours()
+    {
+        static DiameterCheck.Item At(int id, float x, float diameterPx, int cents) =>
+            new(id, diameterPx, new CoinClassification(cents, 0.95f, new[] { (cents, 0.95f) }, "test"), x, 0);
+
+        var items = new[] { At(1, 0, 32.5f, 1), At(2, 90, 37.5f, 2), At(3, 180, 42.5f, 5), At(4, 270, 64.5f, 1) };   // l'ultima è grande 2€, non 1 cent
+        Assert.True(DiameterCheck.Apply(items).Single(i => i.CoinId == 4).Classification.Confidence < 0.6f);
     }
 
     [Fact]

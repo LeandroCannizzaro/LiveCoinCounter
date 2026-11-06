@@ -24,6 +24,13 @@ public sealed record CaptureOptions
     /// <summary>Nitidezza a cui un fotogramma pesa al massimo nel mosaico (assoluta: un fotogramma più nitido sostituisce uno sfocato).</summary>
     public double SharpnessReference { get; init; } = 150;
 
+    /// <summary>
+    /// Inlier minimi per comporre un fotogramma chiave nel mosaico (solo tracker a punti caratteristici; non vale per il primo).
+    /// Un aggancio debole (nella prova sul campo: 26 inlier) mette nel mosaico un fotogramma storto e si vede la cucitura;
+    /// i fotogrammi di aggancio del tracker intanto tengono il tracking, e il fotogramma buono arriva poco dopo.
+    /// </summary>
+    public int MinKeyframeInliers { get; init; } = 60;
+
     /// <summary>Sotto questa nitidezza mediana (ultimi fotogrammi) si suggerisce di allontanarsi / rimettere a fuoco.</summary>
     public double BlurryBelow { get; init; } = 45;
 
@@ -45,7 +52,7 @@ public sealed record TrackingUpdate(TrackStatus Status, string? Hint, Quad? Fram
     Quad? LastKnownQuad = null, bool Blurry = false, bool Dark = false);
 
 /// <summary>Una moneta da salvare: <see cref="Crop"/> è valorizzato quando c'è un ritaglio nuovo o migliore.</summary>
-public sealed record CoinChange(CoinTrack Track, bool IsNew, ArgbImage? Crop);
+public sealed record CoinChange(CoinTrack Track, bool IsNew, ArgbImage? Crop, CoinColor? Color = null);
 
 /// <summary>Dove finiscono i risultati dell'acquisizione: database e file (lo implementa l'app).</summary>
 public interface ICaptureSink
@@ -225,7 +232,14 @@ public sealed class CaptureEngine
                 hint ??= "Immagine sfocata o troppo scura: tieni fermo il telefono su una zona con le monete, aggiungi luce";
             }
 
-            if (newArea && sharpEnough && !Canvas.IsFull)
+            var weakAlignment = _keyframeCount > 0 && result.Detail?.Source.StartsWith("features", StringComparison.Ordinal) == true &&
+                                result.Inliers < _options.MinKeyframeInliers;
+
+            if (newArea && sharpEnough && weakAlignment)
+            {
+                decision = "weak_alignment";
+            }
+            else if (newArea && sharpEnough && !Canvas.IsFull)
             {
                 decision = "keyframe";
                 _tracker.CommitKeyframe(h);
@@ -379,8 +393,8 @@ public sealed class CaptureEngine
             var update = Coins.Observe(new CoinObservation(coin.Box, mosaicBox, coin.Confidence, quality, keyframe.Index,
                 coin.Cents, coin.ClassConfidence));
             var crop = update.IsBetter ? ImageOps.CropSquare(image, coin.Box, _options.CropSize) : null;
-            changes.Add(new CoinChange(update.Track, update.IsNew, crop));
-            var color = crop is not null && _log.Enabled ? CoinColorAnalysis.Analyze(crop) : null;
+            var color = crop is not null ? CoinColorAnalysis.Analyze(crop) : null;
+            changes.Add(new CoinChange(update.Track, update.IsNew, crop, color));
             logged?.Add(new
             {
                 color = color is null ? null : new { color.CoreHue, color.CoreSat, color.CoreVal, color.RingHue, color.RingSat, color.RingVal, guess = color.Guess },

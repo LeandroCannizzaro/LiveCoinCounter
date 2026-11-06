@@ -149,6 +149,10 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
     public SessionSummaryViewModel()
     {
+        OpenSurfaceCommand = new Command(async () =>
+        {
+            if (_sessionId is not null) await Shell.Current.GoToAsync($"surface?id={Uri.EscapeDataString(_sessionId)}");
+        });
         AllCorrectCommand = new Command(async () => await AllCorrectAsync(), () => !IsBusy);
         NoteCommand = new Command(async () => await EditNoteAsync());
         ShowCoinsCommand = new Command(async () => await OpenCoinsAsync(false));
@@ -162,6 +166,9 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
             if (_session is not null && await SessionActions.DeleteAsync(_session)) await Shell.Current.GoToAsync("..");
         });
     }
+
+    /// <summary>La superficie acquisita a tutto schermo, da ingrandire.</summary>
+    public ICommand OpenSurfaceCommand { get; }
 
     /// <summary>«Tutte le monete sono giuste»: conferma in blocco i riconoscimenti non ancora controllati.</summary>
     public ICommand AllCorrectCommand { get; }
@@ -264,7 +271,8 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
         var session = _session;
         var coins = _coins;
-        var annotated = await Task.Run(() => ImageHelper.DrawSessionMosaic(session, coins));
+        var options = new SurfaceRender(Boxes: true, Grid: SettingsService.GridSpacing, Scale: SessionServices.ScaleOf(session, coins));
+        var annotated = await Task.Run(() => ImageHelper.DrawSessionMosaic(session, coins, options));
         MosaicImage = annotated is null ? null : ImageSource.FromStream(() => new MemoryStream(annotated));
 
         foreach (var p in new[] { nameof(Name), nameof(DateText), nameof(TotalText), nameof(CoinCount), nameof(UncertainCount),

@@ -1,6 +1,7 @@
 using Android.Graphics;
 using Android.Media;
 using LiveCoinCounter.Models;
+using LiveCoinCounter.Services.Sessions;
 
 namespace LiveCoinCounter.Services;
 
@@ -116,9 +117,12 @@ public static class ImageHelper
     /// Il mosaico di una sessione con il riquadro di ogni moneta e il suo valore (verde sicura, arancione incerta,
     /// blu corretta a mano, grigio esclusa). Null se la sessione non ha un mosaico salvato.
     /// </summary>
-    public static byte[]? DrawSessionMosaic(LiveCoinCounter.Sessions.SessionRecord session, IReadOnlyList<LiveCoinCounter.Sessions.CoinRecord> coins)
+    public static byte[]? DrawSessionMosaic(LiveCoinCounter.Sessions.SessionRecord session, IReadOnlyList<LiveCoinCounter.Sessions.CoinRecord> coins,
+        SurfaceRender? options = null)
     {
-        if (session.MosaicPreviewPath is not { } path || !File.Exists(path)) return null;
+        options ??= new SurfaceRender();
+        var path = options.Photo && File.Exists(SessionStorage.MosaicPhotoPath(session.Id)) ? SessionStorage.MosaicPhotoPath(session.Id) : session.MosaicPreviewPath;
+        if (path is null || !File.Exists(path)) return null;
         try
         {
             using var decoded = BitmapFactory.DecodeFile(path);
@@ -126,6 +130,10 @@ public static class ImageHelper
             using var bitmap = decoded.Copy(Bitmap.Config.Argb8888!, true)!;
             using var canvas = new Canvas(bitmap);
             var unit = Math.Max(bitmap.Width, bitmap.Height) / 400f;
+
+            if (options.Grid != LiveCoinCounter.Sessions.GridSpacing.Off && options.Scale is { } scale)
+                DrawGrid(canvas, bitmap.Width, bitmap.Height, session, scale, (int)options.Grid, unit);
+            if (!options.Boxes) return Encode(bitmap);
             using var box = new Android.Graphics.Paint { AntiAlias = true, StrokeWidth = Math.Max(2f, unit * 1.2f) };
             box.SetStyle(Android.Graphics.Paint.Style.Stroke);
             using var text = new Android.Graphics.Paint { AntiAlias = true, TextSize = Math.Max(12f, unit * 7f), FakeBoldText = true, Color = Android.Graphics.Color.Black };
@@ -158,14 +166,61 @@ public static class ImageHelper
                 canvas.DrawText(label, x + 3, y - 4, text);
             }
 
-            using var output = new MemoryStream();
-            bitmap.Compress(Bitmap.CompressFormat.Jpeg!, 88, output);
-            return output.ToArray();
+            return Encode(bitmap);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static byte[] Encode(Bitmap bitmap)
+    {
+        using var output = new MemoryStream();
+        bitmap.Compress(Bitmap.CompressFormat.Jpeg!, 90, output);
+        return output.ToArray();
+    }
+
+    /// <summary>
+    /// Griglia metrica sull'immagine del mosaico: ancorata all'origine del mosaico, una riga ogni <paramref name="cm"/> cm,
+    /// più marcata ogni 5 righe (1 e 2 cm) o 2 (5 cm); in basso a sinistra la legenda con l'origine della scala.
+    /// </summary>
+    private static void DrawGrid(Canvas canvas, int width, int height, LiveCoinCounter.Sessions.SessionRecord session,
+        LiveCoinCounter.Sessions.SurfaceScale scale, int cm, float unit)
+    {
+        var step = scale.PxPerMm * 10 * cm * session.PreviewScale;      // pixel dell'immagine per riga
+        if (step < 4) return;
+        var major = cm switch { 1 => 5, 2 => 5, 5 => 2, _ => 1 };
+        using var line = new Android.Graphics.Paint { AntiAlias = true };
+        line.SetStyle(Android.Graphics.Paint.Style.Stroke);
+
+        // riga k del mosaico → pixel: (k * passoMosaico - origine) * scala dell'anteprima
+        var stepMosaic = scale.PxPerMm * 10 * cm;
+        var first = (int)Math.Floor(session.PreviewOriginX / stepMosaic);
+        var last = (int)Math.Ceiling((session.PreviewOriginX + width / session.PreviewScale) / stepMosaic);
+        for (var k = first; k <= last; k++)
+        {
+            var x = (float)((k * stepMosaic - session.PreviewOriginX) * session.PreviewScale);
+            line.Color = Android.Graphics.Color.Argb(k % major == 0 ? 170 : 80, 255, 255, 255);
+            line.StrokeWidth = Math.Max(1f, unit * (k % major == 0 ? 0.55f : 0.3f));
+            canvas.DrawLine(x, 0, x, height, line);
+        }
+        first = (int)Math.Floor(session.PreviewOriginY / stepMosaic);
+        last = (int)Math.Ceiling((session.PreviewOriginY + height / session.PreviewScale) / stepMosaic);
+        for (var k = first; k <= last; k++)
+        {
+            var y = (float)((k * stepMosaic - session.PreviewOriginY) * session.PreviewScale);
+            line.Color = Android.Graphics.Color.Argb(k % major == 0 ? 170 : 80, 255, 255, 255);
+            line.StrokeWidth = Math.Max(1f, unit * (k % major == 0 ? 0.55f : 0.3f));
+            canvas.DrawLine(0, y, width, y, line);
+        }
+
+        var label = $"Griglia {cm} cm · {scale.Label}";
+        using var text = new Android.Graphics.Paint { AntiAlias = true, TextSize = Math.Max(12f, unit * 6f), Color = Android.Graphics.Color.White };
+        using var back = new Android.Graphics.Paint { Color = Android.Graphics.Color.Argb(150, 0, 0, 0) };
+        var w = text.MeasureText(label);
+        canvas.DrawRect(unit * 2, height - text.TextSize - unit * 6, unit * 2 + w + unit * 4, height - unit * 2, back);
+        canvas.DrawText(label, unit * 4, height - unit * 4, text);
     }
 
     /// <summary>Piccola immagine bianca usata per verificare la connessione a un provider.</summary>
