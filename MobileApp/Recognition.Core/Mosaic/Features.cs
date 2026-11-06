@@ -36,6 +36,39 @@ public static class FeatureMatcher
     /// Accoppiamento a forza bruta con distanza di Hamming e test del rapporto di Lowe: si tiene una corrispondenza solo se
     /// è nettamente migliore della seconda scelta (le monete si somigliano tutte: senza questo test i falsi abbondano).
     /// </summary>
+    /// <summary>
+    /// Accoppiamento guidato per fotogrammi vicini nel tempo: ogni punto cerca solo tra quelli entro <paramref name="radius"/>
+    /// pixel dalla stessa posizione (il telefono si è mosso poco). Su un tavolo con graffi e grana ripetitivi il test del
+    /// rapporto su tutta l'immagine scarta le corrispondenze valide, perché ce ne sono molte quasi uguali; nella finestra
+    /// i candidati sono pochi e si può essere meno severi.
+    /// </summary>
+    public static List<PointMatch> MatchNear(FeatureSet query, FeatureSet train, float radius, int maxDistance = 80, float ratio = 0.9f)
+    {
+        var result = new List<PointMatch>();
+        if (query.Count == 0 || train.Count < 2) return result;
+
+        var q = query.Descriptors;
+        var t = train.Descriptors;
+        for (var i = 0; i < query.Count; i++)
+        {
+            int best = int.MaxValue, second = int.MaxValue, bestIndex = -1;
+            ulong a0 = q[i * 4], a1 = q[i * 4 + 1], a2 = q[i * 4 + 2], a3 = q[i * 4 + 3];
+            float qx = query.X[i], qy = query.Y[i];
+            for (var j = 0; j < train.Count; j++)
+            {
+                if (Math.Abs(train.X[j] - qx) > radius || Math.Abs(train.Y[j] - qy) > radius) continue;
+                var d = BitOperations.PopCount(a0 ^ t[j * 4]) + BitOperations.PopCount(a1 ^ t[j * 4 + 1])
+                      + BitOperations.PopCount(a2 ^ t[j * 4 + 2]) + BitOperations.PopCount(a3 ^ t[j * 4 + 3]);
+                if (d < best) { second = best; best = d; bestIndex = j; }
+                else if (d < second) second = d;
+            }
+
+            if (bestIndex >= 0 && best <= maxDistance && (second == int.MaxValue || best < ratio * second))
+                result.Add(new PointMatch(query.X[i], query.Y[i], train.X[bestIndex], train.Y[bestIndex], best));
+        }
+        return result;
+    }
+
     public static List<PointMatch> Match(FeatureSet query, FeatureSet train, int maxDistance = 70, float ratio = 0.8f)
     {
         var result = new List<PointMatch>();

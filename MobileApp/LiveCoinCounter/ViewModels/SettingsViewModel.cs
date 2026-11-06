@@ -198,7 +198,7 @@ public class SettingsViewModel : INotifyPropertyChanged
         new SettingOption<RetentionMode>(RetentionMode.WithKeyframes, "Anche i fotogrammi chiave",
             "Si conservano anche le foto originali del mosaico (decine di MB per sessione), per rianalizzarle con modelli futuri."),
         new SettingOption<RetentionMode>(RetentionMode.DebugFrames, "Fotogrammi in debug",
-            "Come il predefinito, ma registra anche i fotogrammi della fotocamera (3 al secondo) con la posa: per lo sviluppo.")
+            "Come il predefinito, ma registra ogni fotogramma elaborato (circa 1 MB al secondo) con la posa: serve a riprodurre il tracking sul PC.")
     };
 
     public SettingOption<RetentionMode> SelectedRetention

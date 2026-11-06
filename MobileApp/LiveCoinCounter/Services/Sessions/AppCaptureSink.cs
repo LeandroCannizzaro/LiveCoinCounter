@@ -11,7 +11,11 @@ namespace LiveCoinCounter.Services.Sessions;
 /// </summary>
 public sealed class AppCaptureSink : ICaptureSink
 {
-    private const long DebugFrameIntervalNs = 333_000_000;
+    /// <summary>
+    /// In modalità debug si registra (quasi) ogni fotogramma elaborato dal tracker: servono tutti per riprodurre il tracking
+    /// sul PC e provare algoritmi diversi sugli stessi dati. A ~4 fotogrammi al secondo sono circa 1 MB al secondo.
+    /// </summary>
+    private const long DebugFrameIntervalNs = 50_000_000;
 
     private readonly SessionRecord _session;
     private readonly SessionRepository _repository;
@@ -29,7 +33,7 @@ public sealed class AppCaptureSink : ICaptureSink
         _repository = repository;
         if (session.Retention == RetentionMode.DebugFrames)
         {
-            _debugFrames = Channel.CreateBounded<CameraFrame>(new BoundedChannelOptions(4) { FullMode = BoundedChannelFullMode.DropOldest });
+            _debugFrames = Channel.CreateBounded<CameraFrame>(new BoundedChannelOptions(32) { FullMode = BoundedChannelFullMode.DropOldest });
             _debugWriter = Task.Run(WriteDebugFramesAsync);
         }
     }

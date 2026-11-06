@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace LiveCoinCounter.Mosaic;
 
 /// <summary>Un fotogramma della fotocamera, con la posa ARCore quando disponibile.</summary>
@@ -24,7 +26,11 @@ public sealed record CandidateAttempt(int Keyframe, int Matches, int Inliers, do
 
 /// <summary>Perché il tracking ha dato quel risultato: serve al registro diagnostico, non alla logica.</summary>
 public sealed record TrackDetail(string Source, int Features, int KeyframeCount, int LostFrames, bool Relocalizing,
-    IReadOnlyList<CandidateAttempt> Attempts, string? Reason = null, double? Deviation = null, int Anchors = 0, bool AnchorAdded = false);
+    IReadOnlyList<CandidateAttempt> Attempts, string? Reason = null, double? Deviation = null, int Anchors = 0, bool AnchorAdded = false,
+    TrackTimings? Timings = null);
+
+/// <summary>Quanto è costata ogni fase del tracking di un fotogramma, in millisecondi (<c>MatchMs</c> include RANSAC).</summary>
+public sealed record TrackTimings(double GrayMs, double ExtractMs, double MatchMs);
 
 /// <summary>
 /// Colloca ogni fotogramma nel mosaico. Tre implementazioni, scelte nelle impostazioni: feature (OpenCV o codice puro),
@@ -82,6 +88,9 @@ public sealed record FeatureTrackerOptions
     /// <summary>Oltre questo numero si scartano i fotogrammi di aggancio più vecchi (quelli chiave restano).</summary>
     public int MaxAnchors { get; init; } = 120;
 
+    /// <summary>Raggio di ricerca dell'accoppiamento guidato col frame precedente, in frazione del lato maggiore (0,18 = 115 px su 640).</summary>
+    public double GuidedRadius { get; init; } = 0.18;
+
     /// <summary>Se un candidato ha già almeno questi inlier (e rapporto ≥ 0,5) non si provano gli altri: dimezza il tempo per fotogramma.</summary>
     public int EarlyAcceptInliers { get; init; } = 80;
 }
@@ -104,6 +113,9 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
     private (FeatureSet Features, float Scale, int Width, int Height)? _pending;
     private int _framesSinceAnchor = int.MaxValue / 2;
 
+    /// <summary>L'ultimo fotogramma collocato (con qualsiasi riferimento): primo candidato per il fotogramma successivo.</summary>
+    private Keyframe? _previous;
+
     public FeatureMosaicTracker(IFeatureExtractor extractor, FeatureTrackerOptions? options = null)
     {
         _extractor = extractor;
@@ -119,9 +131,13 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
     /// <param name="prior">Stima a priori dell'omografia (modalità ibrida): guida la scelta dei fotogrammi chiave e il primo fotogramma.</param>
     public TrackResult Process(CameraFrame frame, Homography? prior)
     {
+        var phase = Stopwatch.StartNew();
         var gray = ImageOps.ToGray(frame.Image, _options.TrackingMaxSide, out var scale);
         var sharpness = ImageOps.Sharpness(gray);
+        var grayMs = phase.Elapsed.TotalMilliseconds;
+        phase.Restart();
         var features = _extractor.Extract(gray, _options.MaxFeatures);
+        var extractMs = phase.Elapsed.TotalMilliseconds;
         _pending = (features, scale, frame.Image.Width, frame.Image.Height);
 
         if (_keyframes.Count == 0)
@@ -142,74 +158,99 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
         var predictedCenter = predicted is { } p ? Map(p, center) : _keyframes[^1].Center;
 
         var ordered = _keyframes.OrderBy(k => k.Center.DistanceTo(predictedCenter)).ToList();
-        var candidates = ordered.Take(_options.CandidateKeyframes).ToList();
-        var relocalizing = _lostFrames >= _options.LostAfter && ordered.Count > candidates.Count;
-        var attempts = new List<CandidateAttempt>();
+        var nearest = ordered.Take(_options.CandidateKeyframes).ToList();
+        var relocalizing = _lostFrames >= _options.LostAfter && ordered.Count > nearest.Count;
         if (relocalizing)
         {
             // rilocalizzazione: a ogni fotogramma un gruppo diverso di fotogrammi chiave, dai più vicini ai più lontani
             _relocalizeOffset = (_relocalizeOffset + _options.CandidateKeyframes) % ordered.Count;
-            candidates.AddRange(ordered.Skip(_relocalizeOffset).Take(_options.CandidateKeyframes));
-            candidates = candidates.Distinct().ToList();
+            nearest.AddRange(ordered.Skip(_relocalizeOffset).Take(_options.CandidateKeyframes));
+            nearest = nearest.Distinct().ToList();
         }
 
-        Homography? best = null;
-        var bestInliers = 0;
-        foreach (var keyframe in candidates)
+        var attempts = new List<CandidateAttempt>();
+        var successes = new List<(Homography H, int Inliers, bool IsPrevious)>();
+        var matchTimer = Stopwatch.StartNew();
+
+        // Un candidato: punti in comune, RANSAC, controllo di plausibilità. Gli esiti vanno nel registro.
+        bool Try(Keyframe reference, int index, bool isPrevious)
         {
-            var index = _keyframes.IndexOf(keyframe);
-            var matches = FeatureMatcher.Match(features, keyframe.Features);
+            // il frame precedente è vicino nel tempo: ogni punto cerca solo nei dintorni (accoppiamento guidato)
+            var matches = isPrevious
+                ? FeatureMatcher.MatchNear(features, reference.Features, (float)(_options.GuidedRadius * Math.Max(gray.Width, gray.Height)))
+                : FeatureMatcher.Match(features, reference.Features);
             var ransac = HomographyRansac.Estimate(matches, _options.RansacThreshold, minInliers: _options.MinInliers);
             if (ransac is null)
             {
                 attempts.Add(new CandidateAttempt(index, matches.Count, 0, 0, matches.Count < _options.MinInliers ? "few_matches" : "ransac_failed"));
-                continue;
+                return false;
             }
             if (ransac.InlierRatio < _options.MinInlierRatio)
             {
                 attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "low_ratio"));
-                continue;
-            }
-            if (ransac.Inliers <= bestInliers)
-            {
-                attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "not_better"));
-                continue;
+                return false;
             }
 
-            // da pixel in grigio del fotogramma a pixel in grigio del fotogramma chiave → pixel originali → mosaico
-            var frameToKeyframe = Homography.Scale(1 / keyframe.GrayScale) * ransac.Homography * Homography.Scale(scale);
-            var candidate = keyframe.FrameToMosaic * frameToKeyframe;
-            var problem = Implausible(candidate, frame.Image.Width, frame.Image.Height, keyframe.AreaScale);
+            // da pixel in grigio del fotogramma a pixel in grigio del riferimento → pixel originali → mosaico
+            var frameToReference = Homography.Scale(1 / reference.GrayScale) * ransac.Homography * Homography.Scale(scale);
+            var candidate = reference.FrameToMosaic * frameToReference;
+            var problem = Implausible(candidate, frame.Image.Width, frame.Image.Height, reference.AreaScale);
             if (problem is not null)
             {
                 attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "implausible:" + problem));
-                continue;
+                return false;
             }
 
             attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "ok"));
-            best = candidate;
-            bestInliers = ransac.Inliers;
-
-            // i candidati sono in ordine di vicinanza: se il primo aggancia bene non serve provare gli altri
-            if (bestInliers >= _options.EarlyAcceptInliers && ransac.InlierRatio >= 0.5) break;
+            successes.Add((candidate, ransac.Inliers, isPrevious));
+            return true;
         }
 
-        if (best is null)
+        // 1) il fotogramma collocato subito prima (index -1): stesso stato di fuoco, luce e riflessi, quindi di solito il
+        //    confronto migliore, e funziona anche su un tavolo povero di dettagli dove i fotogrammi vecchi non servono più
+        var previousOk = false;
+        if (_previous is { } previous)
+            previousOk = Try(previous, -1, isPrevious: true);
+
+        // 2) i fotogrammi chiave e di aggancio più vicini: correggono la deriva della catena. Se il precedente ha agganciato
+        //    molto bene basta il più vicino.
+        var limit = previousOk && successes[0].Inliers >= _options.EarlyAcceptInliers ? 1 : nearest.Count;
+        foreach (var reference in nearest.Take(limit))
+        {
+            if (_previous is { } prev && ReferenceEquals(prev.Features, reference.Features)) continue;   // è già stato provato
+            Try(reference, _keyframes.IndexOf(reference), isPrevious: false);
+        }
+        var matchMs = matchTimer.Elapsed.TotalMilliseconds;
+        var timings = new TrackTimings(grayMs, extractMs, matchMs);
+
+        if (successes.Count == 0)
         {
             _lostFrames++;
             var lost = _lostFrames >= _options.LostAfter;
             return new TrackResult(lost ? TrackStatus.Lost : TrackStatus.Tracking, null, sharpness,
                 lost ? "Posizione persa: torna dove vedi il riquadro arancione, oppure tocca ↻ per ricominciare" : null,
-                Detail: new TrackDetail(Id, features.Count, _keyframes.Count, _lostFrames, relocalizing, attempts, "not_placed"));
+                Detail: new TrackDetail(Id, features.Count, _keyframes.Count, _lostFrames, relocalizing, attempts, "not_placed", Timings: timings));
+        }
+
+        // Si sceglie l'aggancio con più inlier; ma un riferimento fisso (chiave o aggancio) con inlier comparabili vince sul
+        // precedente: la catena fotogramma-su-fotogramma accumula deriva, i riferimenti no.
+        var top = successes.MaxBy(s => s.Inliers);
+        var chosen = top;
+        var references = successes.Where(s => !s.IsPrevious).ToList();
+        if (top.IsPrevious && references.Count > 0)
+        {
+            var fixedBest = references.MaxBy(s => s.Inliers);
+            if (fixedBest.Inliers >= 0.6 * top.Inliers && fixedBest.Inliers >= 2 * _options.MinInliers) chosen = fixedBest;
         }
 
         _lostFrames = 0;
-        _last = best;
+        _last = chosen.H;
+        _previous = new Keyframe(features, scale, chosen.H, Map(chosen.H, center), chosen.H.AreaScaleAt(center.X, center.Y));
         _framesSinceAnchor++;
-        var anchored = TryAddAnchor(best.Value, bestInliers);
-        return new TrackResult(TrackStatus.Tracking, best, sharpness, Inliers: bestInliers,
+        var anchored = TryAddAnchor(chosen.H, chosen.Inliers);
+        return new TrackResult(TrackStatus.Tracking, chosen.H, sharpness, Inliers: chosen.Inliers,
             Detail: new TrackDetail(Id, features.Count, _keyframes.Count, 0, relocalizing, attempts, "placed",
-                Anchors: _keyframes.Count(k => k.IsAnchor), AnchorAdded: anchored));
+                Anchors: _keyframes.Count(k => k.IsAnchor), AnchorAdded: anchored, Timings: timings));
     }
 
     /// <summary>

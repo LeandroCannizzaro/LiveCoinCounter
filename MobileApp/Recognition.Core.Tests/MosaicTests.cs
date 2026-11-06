@@ -82,6 +82,66 @@ public class MosaicTests
     }
 
     [Fact]
+    public void Guided_matching_survives_a_repetitive_texture_where_global_matching_does_not()
+    {
+        // un tavolo con la stessa grana ripetuta ogni 64 px: ogni punto ha molti sosia in tutta l'immagine
+        var random = new Random(5);
+        var tile = new int[64 * 64];
+        for (var i = 0; i < tile.Length; i++) tile[i] = 70;
+        for (var r = 0; r < 14; r++)
+        {
+            int x0 = random.Next(4, 52), y0 = random.Next(4, 52), w = random.Next(4, 12), h = random.Next(4, 12), v = random.Next(20, 230);
+            for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++) tile[y * 64 + x] = v;
+        }
+        ArgbImage Render(int shiftX, int shiftY, int seed)
+        {
+            var noise = new Random(seed);
+            var image = new ArgbImage(W, H);
+            for (var y = 0; y < H; y++)
+            for (var x = 0; x < W; x++)
+            {
+                var v = Math.Clamp(tile[((y + shiftY) % 64) * 64 + (x + shiftX) % 64] + noise.Next(-3, 4), 0, 255);
+                image.Pixels[y * W + x] = ImageOps.Argb(v, v, v);
+            }
+            return image;
+        }
+
+        var orb = new OrbLite();
+        var fa = orb.Extract(ImageOps.ToGray(Render(0, 0, 1), 640, out _), 600);
+        var fb = orb.Extract(ImageOps.ToGray(Render(18, 9, 2), 640, out _), 600);   // il telefono si è mosso di poco
+
+        var global = HomographyRansac.Estimate(FeatureMatcher.Match(fb, fa));
+        var guided = HomographyRansac.Estimate(FeatureMatcher.MatchNear(fb, fa, radius: 40));
+
+        Assert.NotNull(guided);
+        Assert.True(guided!.Inliers >= 30, $"inlier guidati: {guided.Inliers}");
+        Assert.True(global is null || global.Inliers < guided.Inliers, $"globale {global?.Inliers} contro guidato {guided.Inliers}");
+    }
+
+    [Fact]
+    public void Chain_from_the_previous_frame_follows_a_path_even_without_anchors()
+    {
+        var scene = new SyntheticScene(2400, 1000, seed: 21);
+        // ancoraggi spenti e un solo fotogramma chiave: il solo confronto con il frame precedente deve bastare
+        var tracker = new FeatureMosaicTracker(new OrbLite(), new FeatureTrackerOptions { MosaicScale = 1, MinAnchorInliers = 100000 });
+        var start = SyntheticScene.View(400, 400, W, H);
+        var first = tracker.Process(new CameraFrame(scene.Render(start, W, H), 0, 0));
+        tracker.CommitKeyframe(first.FrameToMosaic!.Value);
+        var tableToMosaic = first.FrameToMosaic.Value * start.Inverse();
+
+        for (var step = 1; step <= 20; step++)
+        {
+            var view = SyntheticScene.View(400 + step * 70, 400 + (step % 3) * 10, W, H, degrees: Math.Sin(step) * 2);
+            var result = tracker.Process(new CameraFrame(scene.Render(view, W, H), step, 0));
+
+            Assert.True(result.FrameToMosaic is not null, $"perso al passo {step}: {string.Join(" ", result.Detail?.Attempts.Select(a => a.Outcome) ?? Array.Empty<string>())}");
+            var (ex, ey) = (tableToMosaic * view).Apply(W / 2.0, H / 2.0);
+            var (ax, ay) = result.FrameToMosaic!.Value.Apply(W / 2.0, H / 2.0);
+            Assert.True(Math.Abs(ex - ax) < 25 && Math.Abs(ey - ay) < 25, $"passo {step}: atteso ({ex:0},{ey:0}), trovato ({ax:0},{ay:0})");
+        }
+    }
+
+    [Fact]
     public void Tracker_reports_lost_on_unrelated_image_and_relocalizes()
     {
         var scene = new SyntheticScene(1200, 900, seed: 9);
