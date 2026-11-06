@@ -59,6 +59,24 @@ public sealed class SessionRecord
     public int CoinCount { get; set; }
     public int UncertainCount { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>Quando l'utente ha verificato la sessione (conferme, correzioni, monete aggiunte): da qui in poi i dati valgono come "verità".</summary>
+    public DateTime? ReviewedAt { get; set; }
+}
+
+/// <summary>Esito della verifica manuale di una moneta (<see cref="CoinRecord.TruthKind"/>).</summary>
+public static class TruthKinds
+{
+    /// <summary>Il riconoscimento era giusto.</summary>
+    public const string Ok = "ok";
+    /// <summary>Moneta vera ma valore sbagliato.</summary>
+    public const string WrongValue = "wrong_value";
+    /// <summary>Non era una moneta (falso rilevamento).</summary>
+    public const string NotCoin = "not_coin";
+    /// <summary>La stessa moneta contata due volte.</summary>
+    public const string Duplicate = "duplicate";
+    /// <summary>Moneta non rilevata, aggiunta a mano.</summary>
+    public const string Manual = "manual";
 }
 
 [Table("Keyframe")]
@@ -103,6 +121,16 @@ public sealed class CoinRecord
     public string? Note { get; set; }
     public int? CorrectedCents { get; set; }
     public DateTime DetectedAt { get; set; }
+
+    /// <summary>L'utente ha controllato questa moneta (conferma o correzione): è "verità" per il debug.</summary>
+    public bool Verified { get; set; }
+
+    /// <summary>Vedi <see cref="TruthKinds"/>; null finché la moneta non è stata verificata.</summary>
+    public string? TruthKind { get; set; }
+    public string? TruthNote { get; set; }
+
+    /// <summary>Moneta aggiunta a mano perché il rilevatore non l'ha trovata: non ha posizione né ritaglio.</summary>
+    public bool IsManual { get; set; }
 
     /// <summary>Il valore che conta: la correzione dell'utente vince sempre; le monete scartate valgono zero.</summary>
     [Ignore] public int? EffectiveCents => State == CoinState.Rejected ? null : CorrectedCents ?? Cents;

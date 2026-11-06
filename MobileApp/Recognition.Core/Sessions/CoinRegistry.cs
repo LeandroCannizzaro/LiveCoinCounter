@@ -138,12 +138,17 @@ public static class DetectionFilter
     /// Una moneta che tocca il bordo del fotogramma è tagliata: si scarta, comparirà intera in un altro fotogramma chiave.
     /// Si scartano anche riquadri troppo allungati (non sono monete viste dall'alto).
     /// </summary>
-    public static bool IsUsable(RectF box, int frameWidth, int frameHeight, float borderFraction = 0.015f)
+    public static bool IsUsable(RectF box, int frameWidth, int frameHeight, float borderFraction = 0.015f) =>
+        Reason(box, frameWidth, frameHeight, borderFraction) == "ok";
+
+    /// <summary>Come <see cref="IsUsable"/>, ma dice perché il riquadro si scarta: ok, border, aspect o small.</summary>
+    public static string Reason(RectF box, int frameWidth, int frameHeight, float borderFraction = 0.015f)
     {
         var margin = Math.Max(2, Math.Min(frameWidth, frameHeight) * borderFraction);
-        if (box.X < margin || box.Y < margin || box.Right > frameWidth - margin || box.Bottom > frameHeight - margin) return false;
+        if (box.X < margin || box.Y < margin || box.Right > frameWidth - margin || box.Bottom > frameHeight - margin) return "border";
         var aspect = box.Width / Math.Max(1e-3f, box.Height);
-        return aspect is > 0.7f and < 1.43f && box.Diameter >= 8;
+        if (aspect is not (> 0.7f and < 1.43f)) return "aspect";
+        return box.Diameter >= 8 ? "ok" : "small";
     }
 
     /// <summary>Qualità di un'osservazione: più alta per monete vicine al centro del fotogramma.</summary>

@@ -34,10 +34,30 @@ internal static class SessionActions
         return true;
     }
 
-    public static async Task ExportAsync(SessionRecord session)
+    public static Task ExportAsync(SessionRecord session) => SessionStorage.ExportAsync(session);
+
+    /// <summary>Lo stato di una moneta com'è ora, in forma adatta al registro.</summary>
+    public static object Snapshot(CoinRecord c) => new
     {
-        var coins = await SessionServices.Repository.ListCoinsAsync(session.Id);
-        await SessionStorage.ExportAsync(session, coins);
+        state = c.State.ToString(), cents = c.Cents, confidence = c.ClassConfidence, corrected = c.CorrectedCents,
+        verified = c.Verified, kind = c.TruthKind, note = c.TruthNote, manual = c.IsManual
+    };
+
+    /// <summary>
+    /// Dopo ogni modifica dell'utente a una moneta: ricalcola i totali, segna la sessione come verificata, scrive l'evento
+    /// (prima e dopo) nel registro e riscrive l'istantanea, così le correzioni arrivano sul PC con il resto dei dati.
+    /// </summary>
+    public static async Task AfterCoinEditAsync(CoinRecord coin, string action, object? before)
+    {
+        var repository = SessionServices.Repository;
+        var session = await repository.RefreshTotalsAsync(coin.SessionId);
+        if (session is not null)
+        {
+            session.ReviewedAt = DateTime.Now;
+            await repository.UpdateSessionAsync(session);
+        }
+        await SessionDiagnostics.AppendAsync(coin.SessionId, "coin_edit", new { action, coin = coin.Number, before, after = Snapshot(coin) });
+        await SessionServices.WriteSnapshotAsync(coin.SessionId);
     }
 
     public static string Format(int cents) => $"{cents / 100},{cents % 100:D2} €";
@@ -129,6 +149,8 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
     public SessionSummaryViewModel()
     {
+        AllCorrectCommand = new Command(async () => await AllCorrectAsync(), () => !IsBusy);
+        NoteCommand = new Command(async () => await EditNoteAsync());
         ShowCoinsCommand = new Command(async () => await OpenCoinsAsync(false));
         ShowUncertainCommand = new Command(async () => await OpenCoinsAsync(true));
         RetryAiCommand = new Command(async () => await RetryAiAsync(), () => !IsBusy);
@@ -141,6 +163,9 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
         });
     }
 
+    /// <summary>«Tutte le monete sono giuste»: conferma in blocco i riconoscimenti non ancora controllati.</summary>
+    public ICommand AllCorrectCommand { get; }
+    public ICommand NoteCommand { get; }
     public ICommand ShowCoinsCommand { get; }
     public ICommand ShowUncertainCommand { get; }
     public ICommand RetryAiCommand { get; }
@@ -163,6 +188,26 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
         : $"{UncertainCount} monete hanno un riconoscimento incerto: controllale nell'elenco.";
 
     public bool CanRetryAi => HasUncertain && SettingsService.AiMode != AiMode.OfflineOnly && !IsBusy;
+
+    /// <summary>Quante monete l'utente ha già controllato, e la sua nota sulla prova.</summary>
+    public string ReviewText
+    {
+        get
+        {
+            if (_session is null) return string.Empty;
+            var verified = _coins.Count(c => c.Verified && !c.IsManual);
+            var detected = _coins.Count(c => !c.IsManual);
+            var manual = _coins.Count(c => c.IsManual);
+            var text = _session.ReviewedAt is { } at
+                ? $"Verificata il {at:dd/MM HH:mm}: {verified} di {detected} monete controllate"
+                : $"Non ancora verificata ({detected} monete da controllare)";
+            if (manual > 0) text += $", {manual} aggiunte a mano";
+            if (!string.IsNullOrWhiteSpace(_session.Notes)) text += $"\nNota: {_session.Notes}";
+            return text;
+        }
+    }
+
+    public bool CanMarkAllCorrect => _coins.Any(c => c.State == CoinState.Classified && !c.Verified);
 
     public string MethodText => _session is null ? string.Empty :
         $"{(_session.Source == SessionSource.Photo ? "Da foto" : $"Mosaico: {_session.TrackerId}, {_session.KeyframeCount} fotogrammi chiave")} · " +
@@ -187,6 +232,7 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
             OnPropertyChanged(nameof(CanRetryAi));
             ((Command)RetryAiCommand).ChangeCanExecute();
             ((Command)CompleteCommand).ChangeCanExecute();
+            ((Command)AllCorrectCommand).ChangeCanExecute();
         }
     }
 
@@ -223,8 +269,48 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
         foreach (var p in new[] { nameof(Name), nameof(DateText), nameof(TotalText), nameof(CoinCount), nameof(UncertainCount),
                      nameof(HasUncertain), nameof(UncertainText), nameof(CanRetryAi), nameof(MethodText), nameof(Denominations),
-                     nameof(IsCompleted), nameof(NeedsCompletion) })
+                     nameof(IsCompleted), nameof(NeedsCompletion), nameof(ReviewText), nameof(CanMarkAllCorrect) })
             OnPropertyChanged(p);
+    }
+
+    private async Task AllCorrectAsync()
+    {
+        if (_sessionId is null) return;
+        var repository = SessionServices.Repository;
+        var pending = _coins.Where(c => c.State == CoinState.Classified && !c.Verified).ToList();
+        if (pending.Count == 0) return;
+
+        foreach (var coin in pending)
+        {
+            coin.Verified = true;
+            coin.TruthKind = TruthKinds.Ok;
+            await repository.UpdateCoinAsync(coin);
+        }
+        var session = await repository.GetSessionAsync(_sessionId);
+        if (session is not null)
+        {
+            session.ReviewedAt = DateTime.Now;
+            await repository.UpdateSessionAsync(session);
+        }
+        await SessionDiagnostics.AppendAsync(_sessionId, "review_all_ok", new { confirmed = pending.Select(c => c.Number).ToArray() });
+        await SessionServices.WriteSnapshotAsync(_sessionId);
+        await LoadAsync();
+    }
+
+    private async Task EditNoteAsync()
+    {
+        if (_session is null || _sessionId is null) return;
+        var page = Shell.Current?.CurrentPage;
+        if (page is null) return;
+        var note = await page.DisplayPromptAsync("Nota sulla prova",
+            "Cosa è successo? (es. «due gruppi di monete distanti», «luce scarsa»)", "Salva", "Annulla", initialValue: _session.Notes ?? string.Empty, maxLength: 400);
+        if (note is null) return;
+
+        _session.Notes = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        await SessionServices.Repository.UpdateSessionAsync(_session);
+        await SessionDiagnostics.AppendAsync(_sessionId, "session_note", new { note = _session.Notes });
+        await SessionServices.WriteSnapshotAsync(_sessionId);
+        OnPropertyChanged(nameof(ReviewText));
     }
 
     private async Task OpenCoinsAsync(bool onlyUncertain)
@@ -296,25 +382,27 @@ public sealed class CoinItem
     public CoinRecord Record { get; }
     public int Id => Record.Id;
     public ImageSource? Crop { get; }
-    public string Title => $"Moneta {Record.Number}";
+    public string Title => Record.IsManual ? "Aggiunta a mano" : $"Moneta {Record.Number}";
 
     public string ValueText => Record.State switch
     {
-        CoinState.Rejected => "Non è una moneta",
+        CoinState.Rejected => Record.TruthKind == TruthKinds.Duplicate ? "Doppione" : "Non è una moneta",
         CoinState.Detected => "Da riconoscere",
         _ => Record.EffectiveCents is { } c ? EuroCoins.NameOf(c) : "?"
     };
 
-    public double Confidence => Record.State == CoinState.Corrected ? 1 : Record.ClassConfidence;
+    public double Confidence => Record.State == CoinState.Corrected || Record.Verified ? 1 : Record.ClassConfidence;
     public string ConfidenceText => Record.State switch
     {
+        _ when Record.IsManual => "Mancante: aggiunta a mano",
         CoinState.Corrected => "Corretta a mano",
+        CoinState.Classified when Record.Verified => $"Verificata ✓ ({Record.ClassConfidence:P0})",
         CoinState.Rejected => "Esclusa dal conteggio",
         CoinState.Detected => "—",
         _ => $"Confidenza {Record.ClassConfidence:P0}"
     };
 
-    public Color ConfidenceColor => Record.State == CoinState.Corrected ? Color.FromArgb("#2196F3")
+    public Color ConfidenceColor => Record.State == CoinState.Corrected || Record.Verified ? Color.FromArgb("#2196F3")
         : Record.ClassConfidence < SessionRepository.UncertainThreshold ? Color.FromArgb("#FF9800") : Color.FromArgb("#2ECC71");
 
     public string SecondText => Record.SecondCents is { } s && Record.State == CoinState.Classified && Record.SecondScore >= 0.05f
@@ -334,10 +422,38 @@ public sealed class CoinListViewModel : ObservableObject, IQueryAttributable
     public CoinListViewModel()
     {
         OpenCommand = new Command<CoinItem>(async item => await Shell.Current.GoToAsync($"coin?id={item.Id}"));
+        AddMissingCommand = new Command(async () => await AddMissingAsync());
     }
 
     public ObservableCollection<CoinItem> Coins { get; } = new();
     public ICommand OpenCommand { get; }
+
+    /// <summary>«Moneta mancante»: l'app non ne ha trovata una che c'era sul tavolo.</summary>
+    public ICommand AddMissingCommand { get; }
+
+    private async Task AddMissingAsync()
+    {
+        var page = Shell.Current?.CurrentPage;
+        if (page is null || _sessionId is null) return;
+        var choice = await page.DisplayActionSheetAsync("Quale moneta non è stata trovata?", "Annulla", null,
+            EuroCoins.All.Select(c => c.Name).ToArray());
+        if (choice is null || choice == "Annulla") return;
+        var note = await page.DisplayPromptAsync("Dov'era?", "Facoltativo: dove si trovava sul tavolo (es. «in basso a destra, vicino alla 2 euro»)",
+            "Aggiungi", "Salta", maxLength: 200);
+
+        var repository = SessionServices.Repository;
+        var number = (_all.Count == 0 ? 0 : _all.Max(c => c.Number)) + 1;
+        var coin = new CoinRecord
+        {
+            SessionId = _sessionId, Number = number, State = CoinState.Corrected,
+            CorrectedCents = EuroCoins.All.First(c => c.Name == choice).Cents, ClassConfidence = 1,
+            IsManual = true, Verified = true, TruthKind = TruthKinds.Manual,
+            TruthNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim(), DetectedAt = DateTime.Now
+        };
+        await repository.UpsertCoinsAsync(_sessionId, new[] { coin });
+        await SessionActions.AfterCoinEditAsync(coin, "add_missing", before: null);
+        await LoadAsync();
+    }
 
     public bool OnlyUncertain
     {
@@ -375,23 +491,38 @@ public sealed class CoinListViewModel : ObservableObject, IQueryAttributable
 public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
 {
     public const string NotACoin = "Non è una moneta";
+    public const string Duplicate = "Doppione (già contata)";
 
     private int _coinId;
     private CoinRecord? _coin;
     private CoinItem? _item;
     private string? _selectedChoice;
     private string _history = string.Empty;
+    private string _truthNote = string.Empty;
 
     public CoinDetailViewModel()
     {
         SaveCommand = new Command(async () => await SaveAsync());
+        ConfirmCommand = new Command(async () => await ConfirmAsync());
         UndoCommand = new Command(async () => await UndoAsync());
     }
 
     public ICommand SaveCommand { get; }
+
+    /// <summary>«Il riconoscimento è giusto»: la moneta diventa verificata senza cambiare valore.</summary>
+    public ICommand ConfirmCommand { get; }
     public ICommand UndoCommand { get; }
 
-    public IReadOnlyList<string> Choices { get; } = EuroCoins.All.Select(c => c.Name).Append(NotACoin).ToList();
+    public IReadOnlyList<string> Choices { get; } = EuroCoins.All.Select(c => c.Name).Append(NotACoin).Append(Duplicate).ToList();
+
+    /// <summary>Nota libera dell'utente su questa moneta (es. «era appoggiata di taglio»).</summary>
+    public string TruthNote
+    {
+        get => _truthNote;
+        set => SetProperty(ref _truthNote, value);
+    }
+
+    public bool CanConfirm => _coin is { State: CoinState.Classified, Verified: false };
 
     public CoinItem? Item
     {
@@ -411,7 +542,7 @@ public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
         private set => SetProperty(ref _history, value);
     }
 
-    public bool IsCorrected => _coin?.State is CoinState.Corrected or CoinState.Rejected;
+    public bool IsCorrected => _coin is { IsManual: false } && (_coin.State is CoinState.Corrected or CoinState.Rejected || _coin.Verified);
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
@@ -423,7 +554,10 @@ public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
         _coin = await SessionServices.Repository.GetCoinAsync(_coinId);
         if (_coin is null) return;
         Item = new CoinItem(_coin);
-        SelectedChoice = _coin.State == CoinState.Rejected ? NotACoin : _coin.EffectiveCents is { } c ? EuroCoins.NameOf(c) : null;
+        TruthNote = _coin.TruthNote ?? string.Empty;
+        SelectedChoice = _coin.State == CoinState.Rejected ? (_coin.TruthKind == TruthKinds.Duplicate ? Duplicate : NotACoin)
+            : _coin.EffectiveCents is { } c ? EuroCoins.NameOf(c) : null;
+        OnPropertyChanged(nameof(CanConfirm));
 
         var history = await SessionServices.Repository.ListClassificationsAsync(_coin.Id);
         History = history.Count == 0
@@ -440,20 +574,40 @@ public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
     {
         if (_coin is null || SelectedChoice is null) return;
         var predicted = _coin.Cents;
-        if (SelectedChoice == NotACoin)
+        var before = SessionActions.Snapshot(_coin);
+        var note = string.IsNullOrWhiteSpace(TruthNote) ? null : TruthNote.Trim();
+
+        string action;
+        if (SelectedChoice is NotACoin or Duplicate)
         {
             _coin.State = CoinState.Rejected;
             _coin.CorrectedCents = null;
+            _coin.TruthKind = SelectedChoice == Duplicate ? TruthKinds.Duplicate : TruthKinds.NotCoin;
+            action = _coin.TruthKind;
         }
         else
         {
             var cents = EuroCoins.All.First(c => c.Name == SelectedChoice).Cents;
-            _coin.State = CoinState.Corrected;
-            _coin.CorrectedCents = cents;
+            if (predicted == cents && _coin.State != CoinState.Corrected)
+            {
+                // ha scelto lo stesso valore letto dall'app: è una conferma, non una correzione
+                _coin.TruthKind = TruthKinds.Ok;
+                _coin.CorrectedCents = null;
+                _coin.State = CoinState.Classified;
+            }
+            else
+            {
+                _coin.State = CoinState.Corrected;
+                _coin.CorrectedCents = cents;
+                _coin.TruthKind = TruthKinds.WrongValue;
+            }
+            action = _coin.TruthKind;
         }
+        _coin.Verified = true;
+        _coin.TruthNote = note;
 
         await SessionServices.Repository.UpdateCoinAsync(_coin);
-        await SessionServices.Repository.RefreshTotalsAsync(_coin.SessionId);
+        await SessionActions.AfterCoinEditAsync(_coin, action, before);
 
         // con la raccolta foto attiva la correzione diventa un'etichetta per il dataset
         if (PhotoCollectionService.Enabled && await SessionServices.LoadCropAsync(_coin) is { } crop)
@@ -462,13 +616,29 @@ public sealed class CoinDetailViewModel : ObservableObject, IQueryAttributable
         await Shell.Current.GoToAsync("..");
     }
 
+    private async Task ConfirmAsync()
+    {
+        if (_coin is not { State: CoinState.Classified }) return;
+        var before = SessionActions.Snapshot(_coin);
+        _coin.Verified = true;
+        _coin.TruthKind = TruthKinds.Ok;
+        _coin.TruthNote = string.IsNullOrWhiteSpace(TruthNote) ? null : TruthNote.Trim();
+        await SessionServices.Repository.UpdateCoinAsync(_coin);
+        await SessionActions.AfterCoinEditAsync(_coin, "confirm", before);
+        await Shell.Current.GoToAsync("..");
+    }
+
     private async Task UndoAsync()
     {
         if (_coin is null) return;
+        var before = SessionActions.Snapshot(_coin);
         _coin.CorrectedCents = null;
+        _coin.Verified = false;
+        _coin.TruthKind = null;
+        _coin.TruthNote = null;
         _coin.State = _coin.Cents is null ? CoinState.Detected : CoinState.Classified;
         await SessionServices.Repository.UpdateCoinAsync(_coin);
-        await SessionServices.Repository.RefreshTotalsAsync(_coin.SessionId);
+        await SessionActions.AfterCoinEditAsync(_coin, "undo", before);
         await LoadAsync();
     }
 }

@@ -10,11 +10,19 @@ namespace LiveCoinCounter.Services.Sessions;
 /// </summary>
 public static class SessionStorage
 {
+    /// <summary>Cartella privata dell'app: lì stavano le sessioni nelle versioni precedenti (non leggibile da adb).</summary>
+    private static string LegacyRoot => Path.Combine(FileSystem.AppDataDirectory, "sessions");
+
+    /// <summary>
+    /// Cartella delle sessioni: lo spazio dell'app sulla memoria condivisa (<c>Android/data/…/files/sessions</c>), che si
+    /// legge dal PC con <c>adb pull</c> senza bisogno di root. Se non è disponibile si ripiega sulla cartella privata.
+    /// </summary>
     public static string Root
     {
         get
         {
-            var path = Path.Combine(FileSystem.AppDataDirectory, "sessions");
+            var external = Platform.AppContext.GetExternalFilesDir(null)?.AbsolutePath;
+            var path = external is null ? LegacyRoot : Path.Combine(external, "sessions");
             Directory.CreateDirectory(path);
             return path;
         }
@@ -22,8 +30,20 @@ public static class SessionStorage
 
     public static string DatabasePath => Path.Combine(FileSystem.AppDataDirectory, "livecoincounter.db3");
 
-    public static string Folder(string sessionId) => Path.Combine(Root, sessionId);
+    /// <summary>La cartella di una sessione; le sessioni create prima dello spostamento restano dove sono.</summary>
+    public static string Folder(string sessionId)
+    {
+        var legacy = Path.Combine(LegacyRoot, sessionId);
+        return Directory.Exists(legacy) ? legacy : Path.Combine(Root, sessionId);
+    }
+
     public static string MosaicPath(string sessionId) => Path.Combine(Folder(sessionId), "mosaic.jpg");
+
+    /// <summary>Registro diagnostico della sessione: un evento JSON per riga.</summary>
+    public static string DiagnosticsPath(string sessionId) => Path.Combine(Folder(sessionId), "diagnostics.jsonl");
+
+    /// <summary>Istantanea completa della sessione (dati, monete, riconoscimenti, correzioni), riscritta a ogni modifica.</summary>
+    public static string SnapshotPath(string sessionId) => Path.Combine(Folder(sessionId), "session.json");
     public static string CropPath(string sessionId, int number) => Path.Combine(Folder(sessionId), "coins", $"{number:D4}.jpg");
     public static string KeyframePath(string sessionId, int index) => Path.Combine(Folder(sessionId), "keyframes", $"{index:D4}.jpg");
     public static string FramesFolder(string sessionId) => Path.Combine(Folder(sessionId), "frames");
@@ -50,24 +70,11 @@ public static class SessionStorage
         return Directory.Exists(folder) ? new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length) : 0;
     }
 
-    /// <summary>Esporta la sessione (cartella + JSON con monete e tagli) in uno zip e apre la condivisione.</summary>
-    public static async Task ExportAsync(SessionRecord session, IReadOnlyList<CoinRecord> coins)
+    /// <summary>Esporta la sessione (cartella con mosaico, ritagli, istantanea e registro) in uno zip e apre la condivisione.</summary>
+    public static async Task ExportAsync(SessionRecord session)
     {
+        await SessionServices.WriteSnapshotAsync(session.Id);
         var folder = Folder(session.Id);
-        Directory.CreateDirectory(folder);
-        var info = new
-        {
-            session.Id, session.Name, session.StartedAt, session.EndedAt, Source = session.Source.ToString(), session.TrackerId,
-            session.LocatorId, session.ClassifierId, session.TotalCents, session.CoinCount, session.PxPerMm,
-            Coins = coins.Select(c => new
-            {
-                c.Number, c.X, c.Y, c.Width, c.Height, c.DetectionConfidence, c.Observations, State = c.State.ToString(),
-                c.Cents, c.ClassConfidence, c.SecondCents, c.SecondScore, c.CorrectedCents, c.ClassifierId, c.Note,
-                Crop = c.CropPath is null ? null : Path.GetRelativePath(folder, c.CropPath)
-            })
-        };
-        await File.WriteAllTextAsync(Path.Combine(folder, "session.json"), JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true }));
-
         var zip = Path.Combine(FileSystem.CacheDirectory, $"sessione-{session.Id}.zip");
         if (File.Exists(zip)) File.Delete(zip);
         ZipFile.CreateFromDirectory(folder, zip);

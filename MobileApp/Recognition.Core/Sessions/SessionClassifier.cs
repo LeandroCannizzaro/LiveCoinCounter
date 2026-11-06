@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using LiveCoinCounter.Diagnostics;
+
 namespace LiveCoinCounter.Sessions;
 
 /// <summary>
@@ -9,12 +12,14 @@ public sealed class SessionClassifier
     private readonly SessionRepository _repository;
     private readonly Func<CoinRecord, Task<byte[]?>> _loadCrop;
     private readonly Func<DateTime> _now;
+    private readonly IDiagLog _log;
 
-    public SessionClassifier(SessionRepository repository, Func<CoinRecord, Task<byte[]?>> loadCrop, Func<DateTime>? now = null)
+    public SessionClassifier(SessionRepository repository, Func<CoinRecord, Task<byte[]?>> loadCrop, Func<DateTime>? now = null, IDiagLog? log = null)
     {
         _repository = repository;
         _loadCrop = loadCrop;
         _now = now ?? (() => DateTime.Now);
+        _log = log ?? NullDiagLog.Instance;
     }
 
     /// <param name="onlyUncertain">Solo le monete già classificate con confidenza bassa (es. "Riprova con l'AI le incerte").</param>
@@ -29,17 +34,36 @@ public sealed class SessionClassifier
         var done = 0;
         var results = new Dictionary<int, CoinClassification>();
 
+        _log.Event("classify_start", new { classifier = classifier.Id, onlyUncertain, replace, coins = todo.Count, pxPerMm = session.PxPerMm }, important: true);
         progress?.Report((0, todo.Count));
         foreach (var coin in todo)
         {
             ct.ThrowIfCancellationRequested();
+            var timer = Stopwatch.StartNew();
             var jpeg = await _loadCrop(coin);
             CoinClassification? result = null;
+            string? failure = null;
             if (jpeg is not null)
             {
-                result = await classifier.ClassifyAsync(new CoinCrop(coin.Number, jpeg, coin.Diameter, session.PxPerMm), ct);
+                try
+                {
+                    result = await classifier.ClassifyAsync(new CoinCrop(coin.Number, jpeg, coin.Diameter, session.PxPerMm), ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    failure = ex.Message;
+                    _log.Event("error", new { where = "classify", coin = coin.Number, message = ex.Message, stack = ex.ToString() }, important: true);
+                    throw;
+                }
                 if (result is not null) await _repository.AddClassificationAsync(coin.Id, result, _now());
             }
+            _log.Event("classify", new
+            {
+                coin = coin.Number, diameterPx = DiagData.R(coin.Diameter), hasCrop = jpeg is not null, ms = DiagData.R(timer.Elapsed.TotalMilliseconds),
+                cents = result?.Cents, conf = result is null ? (double?)null : DiagData.R(result.Confidence, 3),
+                topK = result?.TopK.Select(k => new { cents = k.Cents, score = DiagData.R(k.Score, 3) }),
+                detectorCents = coin.DetectorCents, detectorConf = DiagData.R(coin.DetectorClassConfidence, 3), failure
+            });
 
             // il taglio dato dal rilevatore nel contesto del fotogramma intero vale come seconda opinione
             if (!onlyUncertain && coin.DetectorCents is { } detCents &&
@@ -57,7 +81,7 @@ public sealed class SessionClassifier
         }
 
         // controllo del diametro su tutte le monete classificate della sessione, incluse quelle di passate precedenti
-        var items = coins.Where(c => c.State != CoinState.Rejected)
+        var items = coins.Where(c => c.State != CoinState.Rejected && !c.IsManual)
             .Select(c => results.TryGetValue(c.Id, out var r) ? new DiameterCheck.Item(c.Id, c.Diameter, r)
                 : c.Cents is { } cents && c.State != CoinState.Detected
                     ? new DiameterCheck.Item(c.Id, c.Diameter, new CoinClassification(c.CorrectedCents ?? cents,
@@ -71,6 +95,11 @@ public sealed class SessionClassifier
             if (!checkedItems.TryGetValue(coin.Id, out var item) || !results.ContainsKey(coin.Id)) continue;
             var c = item.Classification;
             if (!replace && onlyUncertain && coin.Cents is not null && c.Confidence <= coin.ClassConfidence) continue;
+            _log.Event("classify_final", new
+            {
+                coin = coin.Number, before = results[coin.Id].Cents, after = c.Cents, conf = DiagData.R(c.Confidence, 3), note = c.Note,
+                diameterChecked = c.Note is not null
+            });
 
             var second = c.TopK.Where(k => k.Cents != c.Cents).OrderByDescending(k => k.Score).Cast<(int, float)?>().FirstOrDefault();
             coin.Cents = c.Cents;
@@ -87,7 +116,8 @@ public sealed class SessionClassifier
         session.Status = SessionStatus.Completed;
         session.EndedAt ??= _now();
         await _repository.UpdateSessionAsync(session);
-        await _repository.RefreshTotalsAsync(sessionId);
+        var refreshed = await _repository.RefreshTotalsAsync(sessionId);
+        _log.Event("classify_done", new { classified = results.Count, totalCents = refreshed?.TotalCents, coins = refreshed?.CoinCount, uncertain = refreshed?.UncertainCount }, important: true);
         return results.Count;
     }
 }

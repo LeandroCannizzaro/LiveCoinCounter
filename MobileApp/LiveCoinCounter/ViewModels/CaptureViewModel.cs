@@ -26,6 +26,7 @@ public sealed class CaptureViewModel : ObservableObject
     private State _state = State.Idle;
     private volatile TrackingUpdate? _lastTracking;
     private volatile bool _coinsChanged;
+    private string? _loggedHint;
     private volatile string? _lastError;
     private long _lastErrorTick;
     private CameraFrame? _latestFrame;
@@ -169,6 +170,8 @@ public sealed class CaptureViewModel : ObservableObject
         var engine = controller.Engine;
         CoinCount = 0;
         Hint = null;
+        _loggedHint = null;
+        _lastError = null;
         while (_changedTiles.TryDequeue(out _)) { }
         if (_view is not null) _view.Source = engine.Canvas;
 
@@ -218,6 +221,13 @@ public sealed class CaptureViewModel : ObservableObject
         if (_lastError is { } error && Environment.TickCount64 - Interlocked.Read(ref _lastErrorTick) < 6000)
             Hint = $"Errore: {error}";
 
+        // il registro sa cosa ha visto l'operatore: ogni suggerimento mostrato, e quando è sparito
+        if (Hint != _loggedHint)
+        {
+            _loggedHint = Hint;
+            _controller.Log.Event("ui_hint", new { text = Hint, status = _lastTracking?.Status });
+        }
+
         // anteprima della fotocamera: l'ultimo fotogramma, ridotto (solo durante l'acquisizione)
         var frame = _state == State.Capturing ? _controller.LatestFrame : null;
         if (!ReferenceEquals(frame, _latestFrame))
@@ -233,6 +243,7 @@ public sealed class CaptureViewModel : ObservableObject
     private async Task StopAsync()
     {
         if (_controller is null) return;
+        _controller.Log.Event("ui_stop", new { status = _lastTracking?.Status, keyframes = _lastTracking?.Keyframes }, important: true);
         SetState(State.Stopping);
         StatusText = "Ultime monete in analisi…";
         Hint = null;
@@ -260,6 +271,7 @@ public sealed class CaptureViewModel : ObservableObject
     {
         if (_state != State.Capturing || _controller is null) return;
         var previous = _controller;
+        previous.Log.Event("ui_restart", new { status = _lastTracking?.Status, keyframes = _lastTracking?.Keyframes, hint = Hint }, important: true);
         SetState(State.Stopping);
         StatusText = "Salvo la parte acquisita…";
         Hint = null;

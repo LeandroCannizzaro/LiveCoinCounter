@@ -61,6 +61,9 @@ public static class SessionServices
     public static async Task<byte[]?> LoadCropAsync(CoinRecord coin) =>
         coin.CropPath is { } path && File.Exists(path) ? await File.ReadAllBytesAsync(path) : null;
 
+    /// <summary>Riscrive <c>session.json</c> nella cartella della sessione (dopo lo stop, la classificazione e ogni correzione).</summary>
+    public static Task WriteSnapshotAsync(string sessionId) => SessionDiagnostics.WriteSnapshotAsync(Repository, sessionId);
+
     public static async Task DeleteSessionAsync(string sessionId)
     {
         await Repository.DeleteSessionAsync(sessionId);

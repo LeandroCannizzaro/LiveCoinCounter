@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Threading.Channels;
+using LiveCoinCounter.Diagnostics;
 using LiveCoinCounter.Mosaic;
 
 namespace LiveCoinCounter.Sessions;
@@ -67,14 +69,24 @@ public sealed class CaptureEngine
     private int _pending;
     private Quad? _lastKnownQuad;
     private volatile bool _busy;
+    private readonly IDiagLog _log;
 
-    public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null)
+    // contatori per il registro diagnostico (statistiche ogni 2 secondi)
+    private readonly Stopwatch _statsClock = Stopwatch.StartNew();
+    private long _pushed, _skipped, _processed, _trackTicks, _detectTicks, _detections;
+    private long _statsPushed, _statsSkipped, _statsProcessed, _statsTrackTicks, _statsDetectTicks, _statsDetections;
+    private long _lastStatsMs;
+    private int _framesSeen;
+
+    public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null,
+        IDiagLog? log = null)
     {
         _tracker = tracker;
         _locator = locator;
         _sink = sink;
         Canvas = canvas;
         _options = options ?? new CaptureOptions();
+        _log = log ?? NullDiagLog.Instance;
     }
 
     public MosaicCanvas Canvas { get; }
@@ -85,7 +97,15 @@ public sealed class CaptureEngine
     public double? PxPerMm { get; private set; }
 
     /// <summary>Vero se il thread di tracking è libero: chi produce i fotogrammi può saltare la conversione quando è occupato.</summary>
-    public bool WantsFrame => !_busy && _frames.Reader.Count == 0;
+    public bool WantsFrame
+    {
+        get
+        {
+            var wants = !_busy && _frames.Reader.Count == 0;
+            if (!wants) Interlocked.Increment(ref _skipped);
+            return wants;
+        }
+    }
 
     public event Action<TrackingUpdate>? TrackingUpdated;
     public event Action<IReadOnlyList<TileKey>>? MosaicChanged;
@@ -94,12 +114,17 @@ public sealed class CaptureEngine
 
     public void Start()
     {
+        _log.Event("engine_start", new { tracker = _tracker.Id, locator = _locator.Id, options = _options }, important: true);
         _trackingTask ??= Task.Run(TrackingLoopAsync);
         _detectionTask ??= Task.Run(DetectionLoopAsync);
     }
 
     /// <summary>Consegna un fotogramma; se il tracking è indietro il fotogramma precedente in attesa viene scartato.</summary>
-    public bool PushFrame(CameraFrame frame) => _frames.Writer.TryWrite(frame);
+    public bool PushFrame(CameraFrame frame)
+    {
+        Interlocked.Increment(ref _pushed);
+        return _frames.Writer.TryWrite(frame);
+    }
 
     /// <summary>Una foto importata: diventa da sola il mosaico (un solo fotogramma chiave).</summary>
     public async Task AddStillAsync(ArgbImage image)
@@ -117,6 +142,11 @@ public sealed class CaptureEngine
         if (_trackingTask is not null) await _trackingTask;
         _keyframes.Writer.TryComplete();
         if (_detectionTask is not null) await _detectionTask;
+        _log.Event("engine_stop", new
+        {
+            pushed = _pushed, skipped = _skipped, processed = _processed, keyframes = _keyframeCount, coins = Coins.Count,
+            tiles = Canvas.TileCount, bounds = DiagData.Box(Canvas.Bounds), full = Canvas.IsFull
+        }, important: true);
     }
 
     private async Task TrackingLoopAsync()
@@ -130,6 +160,7 @@ public sealed class CaptureEngine
             }
             catch (Exception ex)
             {
+                _log.Event("error", new { where = "tracking", message = ex.Message, stack = ex.ToString() }, important: true);
                 Error?.Invoke(ex);
             }
             finally
@@ -141,31 +172,42 @@ public sealed class CaptureEngine
 
     private async Task ProcessFrameAsync(CameraFrame frame)
     {
+        var timer = Stopwatch.StartNew();
         var result = _tracker.Process(frame);
+        var trackMs = timer.Elapsed.TotalMilliseconds;
+        Interlocked.Add(ref _trackTicks, timer.ElapsedTicks);
+        Interlocked.Increment(ref _processed);
         _sink.OnFrame(frame, result);
         if (result.PxPerMm is { } pxPerMm) PxPerMm = pxPerMm;
 
         var hint = result.Hint;
         Quad? quad = null;
+        var decision = result.FrameToMosaic is null ? "not_placed" : "no_new_area";
+        double? coverage = null;
+        double median = 0;
 
         if (result.FrameToMosaic is { } h)
         {
             quad = h.MapRect(frame.Image.Width, frame.Image.Height);
             _lastKnownQuad = quad;
-            var median = MedianSharpness(result.Sharpness);
+            median = MedianSharpness(result.Sharpness);
             var sharpEnough = result.Sharpness >= _options.MinAbsoluteSharpness &&
                               (median <= 0 || result.Sharpness >= median * _options.MinRelativeSharpness);
-            var newArea = _coverage.CoveredFraction(quad.Value) < _options.KeyframeMaxCoverage;
+            coverage = _coverage.CoveredFraction(quad.Value);
+            var newArea = coverage < _options.KeyframeMaxCoverage;
 
             // il primo fotogramma chiave fissa orientamento e scala di tutto il mosaico: deve essere nitido
+            var firstBlurry = false;
             if (_keyframeCount == 0 && result.Sharpness < _options.FirstKeyframeMinSharpness)
             {
                 sharpEnough = false;
+                firstBlurry = true;
                 hint ??= "Immagine sfocata o troppo scura: tieni fermo il telefono su una zona con le monete, aggiungi luce";
             }
 
             if (newArea && sharpEnough && !Canvas.IsFull)
             {
+                decision = "keyframe";
                 _tracker.CommitKeyframe(h);
                 _coverage.Mark(quad.Value);
                 var quality = (float)Math.Clamp(median > 0 ? result.Sharpness / (2 * median) : 1, 0.2, 1);
@@ -173,18 +215,81 @@ public sealed class CaptureEngine
             }
             else if (newArea && !sharpEnough)
             {
+                decision = firstBlurry ? "first_blurry" : "blurry";
                 hint ??= "Più lentamente: l'immagine è mossa";
+            }
+            else if (newArea && Canvas.IsFull)
+            {
+                decision = "mosaic_full";
             }
         }
 
         if (Canvas.IsFull) hint = "Superficie massima raggiunta: ferma l'acquisizione";
         TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad));
+
+        if (_log.Enabled)
+        {
+            _log.Event("frame", new
+            {
+                n = _framesSeen++,
+                ts = frame.TimestampNs / 1_000_000,
+                w = frame.Image.Width, h = frame.Image.Height, rot = frame.RotationDegrees,
+                status = result.Status.ToString(),
+                decision,
+                sharp = DiagData.R(result.Sharpness), median = DiagData.R(median),
+                cover = coverage is { } c ? DiagData.R(c, 2) : (double?)null,
+                inliers = result.Inliers,
+                ms = DiagData.R(trackMs),
+                quad = quad is { } q ? DiagData.Quad(q) : null,
+                hint,
+                pose = frame.Pose is null ? null : new { tracking = frame.Pose.CameraTracking, plane = frame.Pose.Plane is not null },
+                detail = result.Detail
+            });
+            LogStatsIfDue();
+        }
+    }
+
+    private void LogStatsIfDue()
+    {
+        var now = _statsClock.ElapsedMilliseconds;
+        if (now - _lastStatsMs < 2000) return;
+        var seconds = Math.Max(0.001, (now - _lastStatsMs) / 1000.0);
+        _lastStatsMs = now;
+
+        long Delta(ref long current, ref long previous)
+        {
+            var value = Interlocked.Read(ref current);
+            var d = value - previous;
+            previous = value;
+            return d;
+        }
+
+        var pushed = Delta(ref _pushed, ref _statsPushed);
+        var skipped = Delta(ref _skipped, ref _statsSkipped);
+        var processed = Delta(ref _processed, ref _statsProcessed);
+        var trackTicks = Delta(ref _trackTicks, ref _statsTrackTicks);
+        var detectTicks = Delta(ref _detectTicks, ref _statsDetectTicks);
+        var detections = Delta(ref _detections, ref _statsDetections);
+        _log.Event("stats", new
+        {
+            fpsIn = DiagData.R(pushed / seconds), fpsProcessed = DiagData.R(processed / seconds), skippedBusy = skipped,
+            avgTrackMs = processed == 0 ? 0 : DiagData.R(trackTicks * 1000.0 / Stopwatch.Frequency / processed),
+            avgDetectMs = detections == 0 ? 0 : DiagData.R(detectTicks * 1000.0 / Stopwatch.Frequency / detections),
+            pending = _pending, keyframes = _keyframeCount, coins = Coins.Count, tiles = Canvas.TileCount,
+            managedMb = DiagData.R(GC.GetTotalMemory(false) / 1048576.0), gc2 = GC.CollectionCount(2)
+        });
     }
 
     private async Task AddKeyframeAsync(ArgbImage image, Homography h, float quality, double sharpness)
     {
         var index = _keyframeCount++;
         var changed = Canvas.Compose(image, h, quality);
+        _log.Event("keyframe", new
+        {
+            index, h = DiagData.Homography(h), quad = DiagData.Quad(h.MapRect(image.Width, image.Height)),
+            sharp = DiagData.R(sharpness), quality = DiagData.R(quality, 2), changedTiles = changed.Count, tiles = Canvas.TileCount,
+            bounds = DiagData.Box(Canvas.Bounds), full = Canvas.IsFull
+        });
         if (changed.Count > 0) MosaicChanged?.Invoke(changed);
         Interlocked.Increment(ref _pending);
         await _keyframes.Writer.WriteAsync(new PendingKeyframe(index, image, h, quality));
@@ -194,6 +299,7 @@ public sealed class CaptureEngine
         }
         catch (Exception ex)
         {
+            _log.Event("error", new { where = "keyframe_sink", message = ex.Message, stack = ex.ToString() }, important: true);
             Error?.Invoke(ex);
         }
     }
@@ -216,6 +322,7 @@ public sealed class CaptureEngine
             }
             catch (Exception ex)
             {
+                _log.Event("error", new { where = "detection", keyframe = keyframe.Index, message = ex.Message, stack = ex.ToString() }, important: true);
                 Error?.Invoke(ex);
             }
             finally
@@ -227,20 +334,43 @@ public sealed class CaptureEngine
 
     private async Task DetectAsync(PendingKeyframe keyframe)
     {
+        var timer = Stopwatch.StartNew();
         var image = keyframe.Image;
         var boxes = await _locator.LocateAsync(image);
+        var locateMs = timer.Elapsed.TotalMilliseconds;
         var changes = new List<CoinChange>();
+        var logged = _log.Enabled ? new List<object>() : null;
 
         foreach (var coin in boxes)
         {
-            if (!DetectionFilter.IsUsable(coin.Box, image.Width, image.Height)) continue;
+            if (!DetectionFilter.IsUsable(coin.Box, image.Width, image.Height))
+            {
+                logged?.Add(new { box = DiagData.Box(coin.Box), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents, use = DetectionFilter.Reason(coin.Box, image.Width, image.Height) });
+                continue;
+            }
             var mosaicBox = keyframe.FrameToMosaic.MapBox(coin.Box);
             var quality = DetectionFilter.Centrality(coin.Box, image.Width, image.Height) * keyframe.Quality;
             var update = Coins.Observe(new CoinObservation(coin.Box, mosaicBox, coin.Confidence, quality, keyframe.Index,
                 coin.Cents, coin.ClassConfidence));
             var crop = update.IsBetter ? ImageOps.CropSquare(image, coin.Box, _options.CropSize) : null;
             changes.Add(new CoinChange(update.Track, update.IsNew, crop));
+            var color = crop is not null && _log.Enabled ? CoinColorAnalysis.Analyze(crop) : null;
+            logged?.Add(new
+            {
+                color = color is null ? null : new { color.CoreHue, color.CoreSat, color.CoreVal, color.RingHue, color.RingSat, color.RingVal, guess = color.Guess },
+                box = DiagData.Box(coin.Box), mosaic = DiagData.Box(mosaicBox), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents,
+                classConf = DiagData.R(coin.ClassConfidence, 2), use = "ok", track = update.Track.Id, isNew = update.IsNew,
+                observations = update.Track.Observations, better = update.IsBetter, quality = DiagData.R(quality, 2)
+            });
         }
+
+        Interlocked.Add(ref _detectTicks, timer.ElapsedTicks);
+        Interlocked.Increment(ref _detections);
+        _log.Event("detect", new
+        {
+            keyframe = keyframe.Index, locateMs = DiagData.R(locateMs), totalMs = DiagData.R(timer.Elapsed.TotalMilliseconds),
+            raw = boxes.Count, accepted = changes.Count, tracks = Coins.Count, boxes = logged
+        });
 
         if (changes.Count == 0) return;
         await _sink.OnCoinsAsync(changes);

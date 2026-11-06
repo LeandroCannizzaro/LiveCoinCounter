@@ -1,3 +1,4 @@
+using LiveCoinCounter.Diagnostics;
 using LiveCoinCounter.Mosaic;
 using LiveCoinCounter.Sessions;
 
@@ -11,18 +12,23 @@ public sealed class CaptureController
 {
     private readonly IFrameSource? _source;
     private readonly AppCaptureSink _sink;
+    private readonly JsonlDiagLog _log;
 
-    private CaptureController(SessionRecord session, CaptureEngine engine, IFrameSource? source, AppCaptureSink sink, string? note)
+    private CaptureController(SessionRecord session, CaptureEngine engine, IFrameSource? source, AppCaptureSink sink, string? note, JsonlDiagLog log)
     {
         Session = session;
         Engine = engine;
         _source = source;
         _sink = sink;
         Note = note;
+        _log = log;
     }
 
     public SessionRecord Session { get; }
     public CaptureEngine Engine { get; }
+
+    /// <summary>Registro diagnostico della sessione: la schermata vi aggiunge i propri eventi (pulsanti, suggerimenti).</summary>
+    public IDiagLog Log => _log;
 
     /// <summary>L'ultimo fotogramma arrivato dalla fotocamera (per l'anteprima).</summary>
     public CameraFrame? LatestFrame { get; private set; }
@@ -37,9 +43,16 @@ public sealed class CaptureController
         var repository = SessionServices.Repository;
         var session = await repository.CreateSessionAsync(SessionSource.Live, setup.Tracker.Id, locator.Id, SettingsService.Retention, DateTime.Now);
 
+        var log = SessionDiagnostics.Open(session.Id, "live");
+        log.Event("session_start", new
+        {
+            session = session.Id, source = "live", requestedMethod = SettingsService.CaptureMethod, effectiveMethod = setup.Method,
+            note = setup.Note, tracker = setup.Tracker.Id, frameSource = setup.Source.Id, locator = locator.Id
+        }, important: true);
+
         var sink = new AppCaptureSink(session, repository);
-        var engine = new CaptureEngine(setup.Tracker, locator, sink, new MosaicCanvas());
-        var controller = new CaptureController(session, engine, setup.Source, sink, setup.Note);
+        var engine = new CaptureEngine(setup.Tracker, locator, sink, new MosaicCanvas(), log: log);
+        var controller = new CaptureController(session, engine, setup.Source, sink, setup.Note, log);
         engine.Start();
 
         try
@@ -50,9 +63,11 @@ public sealed class CaptureController
                 engine.PushFrame(frame);
             }, () => engine.WantsFrame);
         }
-        catch
+        catch (Exception ex)
         {
+            log.Event("error", new { where = "camera_start", message = ex.Message, stack = ex.ToString() }, important: true);
             await engine.StopAsync();
+            await log.DisposeAsync();
             await SessionServices.DeleteSessionAsync(session.Id);
             throw;
         }
@@ -67,9 +82,11 @@ public sealed class CaptureController
         var retention = SettingsService.Retention == RetentionMode.DebugFrames ? RetentionMode.MosaicAndCrops : SettingsService.Retention;
         var session = await repository.CreateSessionAsync(SessionSource.Photo, "photo", locator.Id, retention, DateTime.Now);
 
+        var log = SessionDiagnostics.Open(session.Id, "photo");
+        log.Event("session_start", new { session = session.Id, source = "photo", locator = locator.Id, bytes = photo.Length }, important: true);
         var sink = new AppCaptureSink(session, repository);
-        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite()), locator, sink, new MosaicCanvas());
-        var controller = new CaptureController(session, engine, null, sink, null);
+        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite()), locator, sink, new MosaicCanvas(), log: log);
+        var controller = new CaptureController(session, engine, null, sink, null, log);
         engine.Start();
         var image = await Task.Run(() => AndroidImaging.Decode(photo, 3000));
         await engine.AddStillAsync(image);
@@ -107,6 +124,14 @@ public sealed class CaptureController
         await repository.UpdateSessionAsync(session);
         SessionStorage.ApplyRetention(session);
         if (session.Retention != RetentionMode.WithKeyframes) await repository.ClearKeyframeImagesAsync(session.Id);
+
+        _log.Event("session_end", new
+        {
+            session = session.Id, durationS = (session.EndedAt - session.StartedAt)?.TotalSeconds, keyframes = session.KeyframeCount,
+            coins = Engine.Coins.Count, mosaic = new { session.MosaicWidth, session.MosaicHeight }, session.PxPerMm, dropped = _log.Dropped
+        }, important: true);
+        await _log.DisposeAsync();
+        await SessionServices.WriteSnapshotAsync(session.Id);
     }
 }
 
@@ -115,8 +140,12 @@ public static class SessionProcessing
 {
     public static async Task ClassifyAsync(string sessionId, IProgress<(int Done, int Total)>? progress, CancellationToken ct)
     {
-        var classifier = new SessionClassifier(SessionServices.Repository, SessionServices.LoadCropAsync);
-        await classifier.ClassifyAsync(sessionId, SessionServices.CreateOnDeviceClassifier(), progress, ct);
+        await using (var log = SessionDiagnostics.Open(sessionId, "classify"))
+        {
+            var classifier = new SessionClassifier(SessionServices.Repository, SessionServices.LoadCropAsync, log: log);
+            await classifier.ClassifyAsync(sessionId, SessionServices.CreateOnDeviceClassifier(), progress, ct);
+        }
+        await SessionServices.WriteSnapshotAsync(sessionId);
 
         if (SettingsService.AiMode == AiMode.AiAutoUncertain && HasNetwork())
         {
@@ -131,8 +160,11 @@ public static class SessionProcessing
     {
         if (SettingsService.AiMode == AiMode.OfflineOnly) return 0;
         var ai = await SessionServices.CreateAiClassifierAsync();
-        var classifier = new SessionClassifier(SessionServices.Repository, SessionServices.LoadCropAsync);
-        return await classifier.ClassifyAsync(sessionId, ai, progress, ct, onlyUncertain: true, replace: true);
+        await using var log = SessionDiagnostics.Open(sessionId, "classify_ai");
+        var classifier = new SessionClassifier(SessionServices.Repository, SessionServices.LoadCropAsync, log: log);
+        var count = await classifier.ClassifyAsync(sessionId, ai, progress, ct, onlyUncertain: true, replace: true);
+        await SessionServices.WriteSnapshotAsync(sessionId);
+        return count;
     }
 
     public static bool HasNetwork() => Connectivity.Current.NetworkAccess == NetworkAccess.Internet;

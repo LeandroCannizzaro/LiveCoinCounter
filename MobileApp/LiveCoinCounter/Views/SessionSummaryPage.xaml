@@ -70,6 +70,24 @@
 
             <Button Text="🪙 Vedi tutte le monete" Command="{Binding ShowCoinsCommand}" CornerRadius="12" />
 
+            <!-- Verifica: ciò che l'utente conferma o corregge diventa il riferimento per il debug -->
+            <Border Padding="14,10" StrokeThickness="1" StrokeShape="RoundRectangle 12"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="VERIFICA DELLA PROVA" FontSize="11" FontAttributes="Bold" CharacterSpacing="1"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                    <Label Text="{Binding ReviewText}" FontSize="13"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Text="✓ Tutte giuste" Command="{Binding AllCorrectCommand}" IsVisible="{Binding CanMarkAllCorrect}"
+                                CornerRadius="10" FontSize="13" BackgroundColor="#2ECC71" TextColor="Black" />
+                        <Button Grid.Column="1" Text="📝 Nota" Command="{Binding NoteCommand}" CornerRadius="10" FontSize="13"
+                                BackgroundColor="Transparent" BorderWidth="1" BorderColor="{StaticResource Secondary}" TextColor="{StaticResource Secondary}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
             <!-- Dettaglio per taglio -->
             <Label Text="DETTAGLIO PER TAGLIO" FontSize="11" FontAttributes="Bold" CharacterSpacing="1"
                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />

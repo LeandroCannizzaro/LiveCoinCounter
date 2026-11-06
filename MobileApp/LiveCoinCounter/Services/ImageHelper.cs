@@ -133,6 +133,7 @@ public static class ImageHelper
 
             foreach (var c in coins)
             {
+                if (c.IsManual) continue;   // aggiunta a mano: non ha una posizione nel mosaico
                 var color = c.State switch
                 {
                     LiveCoinCounter.Sessions.CoinState.Rejected => Android.Graphics.Color.Rgb(150, 150, 150),
@@ -148,8 +149,9 @@ public static class ImageHelper
                 box.Color = color;
                 canvas.DrawRect(x, y, x + w, y + h, box);
 
-                if (c.EffectiveCents is not { } cents) continue;
-                var label = cents >= 100 ? $"{cents / 100}€" : $"{cents}c";
+                // il numero corrisponde a «Moneta N» nell'elenco: così si trova sul mosaico la moneta da correggere
+                var value = c.EffectiveCents is { } cents ? (cents >= 100 ? $"{cents / 100}€" : $"{cents}c") : (c.State == LiveCoinCounter.Sessions.CoinState.Rejected ? "✗" : "?");
+                var label = $"#{c.Number} {value}";
                 var width = text.MeasureText(label) + 6;
                 back.Color = color;
                 canvas.DrawRect(x, y - text.TextSize - 4, x + width, y, back);

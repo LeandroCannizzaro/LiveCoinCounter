@@ -8,6 +8,10 @@
              Title="Monete"
              BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="＋ Moneta mancante" Command="{Binding AddMissingCommand}" />
+    </ContentPage.ToolbarItems>
+
     <Grid RowDefinitions="Auto,*">
         <Grid ColumnDefinitions="*,Auto" Padding="16,10">
             <Label Text="{Binding SummaryText}" VerticalOptions="Center" FontSize="13"
