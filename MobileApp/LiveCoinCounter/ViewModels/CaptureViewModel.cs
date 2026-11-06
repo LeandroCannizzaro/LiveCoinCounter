@@ -57,6 +57,7 @@ public sealed class CaptureViewModel : ObservableObject
     {
         ToggleCommand = new Command(async () => await ToggleAsync(), () => _state is State.Idle or State.Capturing);
         ImportPhotoCommand = new Command(async () => await ImportPhotoAsync(), () => _state == State.Idle);
+        SingleShotCommand = new Command(async () => await SingleShotAsync(), () => _state == State.Idle);
         CancelProcessingCommand = new Command(() => _processingCts?.Cancel());
         RestartCommand = new Command(async () => await RestartAsync(), () => _state == State.Capturing);
         ToggleTorchCommand = new Command(() =>
@@ -111,6 +112,9 @@ public sealed class CaptureViewModel : ObservableObject
     public ICommand RestartCommand { get; }
     public bool CanRestart => _state == State.Capturing;
     public ICommand ImportPhotoCommand { get; }
+
+    /// <summary>Scatto singolo: qualche fotogramma della stessa inquadratura, analizzato come nell'acquisizione continua.</summary>
+    public ICommand SingleShotCommand { get; }
     public ICommand CancelProcessingCommand { get; }
 
     /// <summary>Il pulsante alterna i simboli start e stop.</summary>
@@ -195,6 +199,36 @@ public sealed class CaptureViewModel : ObservableObject
         {
             System.Diagnostics.Debug.WriteLine($"Controllo sessioni interrotte: {ex}");
         }
+    }
+
+    /// <summary>Quanti scatti fa lo scatto singolo e quanto si aspetta al massimo (fotogrammi sfocati o tracking non ancora partito).</summary>
+    private const int SingleShotCount = 3;
+    private const int SingleShotTimeoutMs = 6000;
+    private bool _singleShot;
+
+    /// <summary>
+    /// Scatto singolo: stessa fotocamera, stessa superficie e stesso motore dell'acquisizione continua, ma senza muoversi. Si chiedono
+    /// alcuni scatti della stessa inquadratura; ogni scatto è analizzato e la stessa moneta vista in più scatti tiene il ritaglio
+    /// migliore. Fatti gli scatti (o scaduto il tempo) si chiude come con lo stop.
+    /// </summary>
+    private async Task SingleShotAsync()
+    {
+        if (_state != State.Idle) return;
+        await StartAsync();
+        if (_state != State.Capturing || _controller is null) return;
+
+        var engine = _controller.Engine;
+        _controller.Log.Event("ui_single_shot", new { shots = SingleShotCount }, important: true);
+        _singleShot = true;
+        StatusText = "Scatto: tieni fermo il telefono sopra le monete";
+        engine.RequestShots(SingleShotCount);
+        var started = Environment.TickCount64;
+        while (_state == State.Capturing && engine.PendingShots > 0 && Environment.TickCount64 - started < SingleShotTimeoutMs)
+            await Task.Delay(100);
+        _controller.Log.Event("ui_single_shot_done", new { missing = engine.PendingShots, ms = Environment.TickCount64 - started }, important: true);
+        _singleShot = false;
+        engine.RequestShots(0);
+        if (_state == State.Capturing) await StopAsync();
     }
 
     private async Task ToggleAsync()
@@ -307,6 +341,7 @@ public sealed class CaptureViewModel : ObservableObject
                 shown = update.Featureless
                     ? "Tavolo vuoto: torna dove vedi le monete (o tocca ↻ per ricominciare)"
                     : "Posizione persa: segui la freccia e cerca la zona nella foto (o tocca ↻ per ricominciare)";
+            if (_singleShot && !lost) shown = "📷 Tieni fermo il telefono: scatto in corso…";
             Hint = StickyHint(shown, important: lost);
 
             // immagini sfocate con luce sufficiente: prova a rimettere a fuoco (al massimo ogni 5 secondi)
@@ -593,6 +628,7 @@ public sealed class CaptureViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowCounter));
         ((Command)ToggleCommand).ChangeCanExecute();
         ((Command)ImportPhotoCommand).ChangeCanExecute();
+        ((Command)SingleShotCommand).ChangeCanExecute();
         ((Command)RestartCommand).ChangeCanExecute();
         OnPropertyChanged(nameof(CanRestart));
         OnPropertyChanged(nameof(CanTorch));

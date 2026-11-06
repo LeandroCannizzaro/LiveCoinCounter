@@ -163,6 +163,20 @@ public sealed class CaptureEngine
     private long _lastStatsMs;
     private int _framesSeen;
     private int _poorFrames;
+    private int _pendingShots;
+    private long _lastShotNs = long.MinValue;
+
+    /// <summary>Tempo minimo tra due scatti dello scatto singolo: fotogrammi un po' diversi (luce, fuoco, rumore) danno ritagli diversi.</summary>
+    public const long ShotSpacingNs = 300_000_000;
+
+    /// <summary>
+    /// Scatto singolo: i prossimi <paramref name="count"/> fotogrammi nitidi e collocati diventano fotogrammi chiave anche se l'area è
+    /// già coperta. Le stesse monete viste in più scatti si riconoscono come una sola e tengono il ritaglio migliore.
+    /// </summary>
+    public void RequestShots(int count) => Interlocked.Exchange(ref _pendingShots, Math.Max(0, count));
+
+    /// <summary>Scatti richiesti e non ancora fatti.</summary>
+    public int PendingShots => Volatile.Read(ref _pendingShots);
     private double _brightnessAverage;
 
     public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null,
@@ -331,7 +345,9 @@ public sealed class CaptureEngine
             var sharpEnough = result.Sharpness >= _options.MinAbsoluteSharpness &&
                               (median <= 0 || result.Sharpness >= median * _options.MinRelativeSharpness);
             coverage = _coverage.CoveredFraction(quad.Value);
-            var newArea = coverage < _options.KeyframeMaxCoverage;
+            // scatto singolo: il fotogramma diventa chiave anche su un'area già coperta (uno ogni ShotSpacingNs)
+            var shot = Volatile.Read(ref _pendingShots) > 0 && (_lastShotNs == long.MinValue || frame.TimestampNs - _lastShotNs >= ShotSpacingNs);
+            var newArea = coverage < _options.KeyframeMaxCoverage || shot;
 
             // il primo fotogramma chiave fissa orientamento e scala di tutto il mosaico: deve essere nitido
             var firstBlurry = false;
@@ -351,7 +367,12 @@ public sealed class CaptureEngine
             }
             else if (newArea && sharpEnough && !Canvas.IsFull)
             {
-                decision = "keyframe";
+                decision = shot ? "shot" : "keyframe";
+                if (shot)
+                {
+                    Interlocked.Decrement(ref _pendingShots);
+                    _lastShotNs = frame.TimestampNs;
+                }
                 _tracker.CommitKeyframe(h);
                 _coverage.Mark(quad.Value);
                 // peso assoluto: un fotogramma nitido sostituisce nel mosaico uno sfocato anche se tutti i precedenti erano sfocati

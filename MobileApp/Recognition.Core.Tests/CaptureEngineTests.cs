@@ -93,6 +93,40 @@ public class CaptureEngineTests
     }
 
     [Fact]
+    public async Task Single_shot_takes_several_keyframes_of_the_same_view_and_counts_each_coin_once()
+    {
+        // telefono fermo: senza scatti ci sarebbe un solo fotogramma chiave; con 3 scatti ce ne sono 3, e le monete restano quelle vere
+        var scene = new SyntheticScene(1000, 800, seed: 21);
+        var random = new Random(8);
+        while (scene.Coins.Count < 6)
+        {
+            double x = 380 + random.Next(240), y = 300 + random.Next(200), r = 18 + random.Next(8);
+            if (scene.Coins.All(c => Math.Sqrt((c.X - x) * (c.X - x) + (c.Y - y) * (c.Y - y)) > c.R + r + 6)) scene.AddCoin(x, y, r);
+        }
+        var locator = new OracleLocator(scene);
+        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite(), new FeatureTrackerOptions { MosaicScale = 1 }), locator, new MemorySink(),
+            new MosaicCanvas(), new CaptureOptions { MinAbsoluteSharpness = 0, FirstKeyframeMinSharpness = 0 });
+        engine.Start();
+        engine.RequestShots(3);
+
+        for (var i = 0; i < 12; i++)
+        {
+            var view = SyntheticScene.View(500 + (i % 2), 400, W, H);
+            var image = scene.Render(view, W, H);
+            locator.Register(image, view);
+            engine.PushFrame(new CameraFrame(image, i * 150_000_000L, 0));      // 150 ms tra un fotogramma e l'altro
+            while (!engine.WantsFrame) await Task.Delay(1);
+            await Task.Delay(5);
+        }
+        await engine.StopAsync();
+
+        Assert.Equal(0, engine.PendingShots);
+        Assert.Equal(3, engine.KeyframeCount);
+        Assert.Equal(scene.Coins.Count, engine.Coins.Count);
+        Assert.All(engine.Coins.Tracks, t => Assert.True(t.Observations >= 2, $"moneta {t.Id} vista {t.Observations} volte"));
+    }
+
+    [Fact]
     public async Task Lost_tracking_reports_the_last_known_position()
     {
         var scene = new SyntheticScene(1200, 900, seed: 9);
