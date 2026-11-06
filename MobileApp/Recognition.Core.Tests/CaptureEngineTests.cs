@@ -127,6 +127,29 @@ public class CaptureEngineTests
     }
 
     [Fact]
+    public async Task A_paused_engine_does_not_build_the_mosaic_until_resumed()
+    {
+        // scatto: mentre si inquadra il motore è in pausa (nessun fotogramma chiave), poi lo scatto lo fa partire
+        var scene = new SyntheticScene(1000, 800, seed: 5);
+        var engine = new CaptureEngine(new FeatureMosaicTracker(new OrbLite()), new OracleLocator(scene), new MemorySink(), new MosaicCanvas(),
+            new CaptureOptions { MinAbsoluteSharpness = 0, FirstKeyframeMinSharpness = 0 }) { Paused = true };
+        engine.Start();
+        async Task Push(int i)
+        {
+            engine.PushFrame(new CameraFrame(scene.Render(SyntheticScene.View(500, 400, W, H), W, H), i * 150_000_000L, 0));
+            while (!engine.WantsFrame) await Task.Delay(1);
+            await Task.Delay(5);
+        }
+        for (var i = 0; i < 4; i++) await Push(i);
+        Assert.Equal(0, engine.KeyframeCount);
+
+        engine.Paused = false;
+        for (var i = 4; i < 8; i++) await Push(i);
+        await engine.StopAsync();
+        Assert.True(engine.KeyframeCount >= 1);
+    }
+
+    [Fact]
     public async Task Lost_tracking_reports_the_last_known_position()
     {
         var scene = new SyntheticScene(1200, 900, seed: 9);

@@ -59,9 +59,29 @@ public partial class SurfacePage : ContentPage
         }
     }
 
+    private double _panX, _panY;
+
     private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
-        if (_scale <= 1) return;
+        if (_scale <= 1)
+        {
+            // senza zoom il trascinamento orizzontale è uno swipe tra le superfici di una serie (a fine gesto lo spostamento
+            // non è sempre riportato: si tiene l'ultimo)
+            switch (e.StatusType)
+            {
+                case GestureStatus.Started:
+                    _panX = _panY = 0;
+                    break;
+                case GestureStatus.Running:
+                    _panX = e.TotalX;
+                    _panY = e.TotalY;
+                    break;
+                case GestureStatus.Completed:
+                    if (Math.Abs(_panX) > 80 && Math.Abs(_panX) > 1.5 * Math.Abs(_panY)) _viewModel.Swipe(towardsLeft: _panX < 0);
+                    break;
+            }
+            return;
+        }
         switch (e.StatusType)
         {
             case GestureStatus.Running:

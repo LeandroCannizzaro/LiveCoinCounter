@@ -41,6 +41,9 @@ public class MosaicView : View
     public ArgbImage? Preview { get; set; }
     public int PreviewRotation { get; set; }
 
+    /// <summary>Solo la telecamera, a tutto schermo (scatto: si inquadra prima di scattare).</summary>
+    public bool FullPreview { get; set; }
+
     /// <summary>Testo mostrato quando il mosaico è vuoto.</summary>
     public string EmptyText { get; set; } = string.Empty;
 

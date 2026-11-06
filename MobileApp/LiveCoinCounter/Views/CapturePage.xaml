@@ -52,6 +52,7 @@
         <!-- Pulsante trasparente start / stop -->
         <Button Text="{Binding ToggleSymbol}"
                 Command="{Binding ToggleCommand}"
+                IsVisible="{Binding ShowToggle}"
                 VerticalOptions="End" HorizontalOptions="Center" Margin="0,0,0,28"
                 WidthRequest="72" HeightRequest="72" CornerRadius="36" Padding="0"
                 FontSize="28" TextColor="White"
@@ -66,6 +67,22 @@
                 WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
                 FontSize="22" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
                 SemanticProperties.Description="Scatto singolo: conta le monete inquadrate tenendo fermo il telefono" />
+
+        <!-- Scatto: mentre si inquadra (telecamera a tutto schermo) il pulsante di scatto al posto di ▶, e ✕ per uscire -->
+        <Button Text="◉"
+                Command="{Binding ShutterCommand}"
+                IsVisible="{Binding IsShotPreview}"
+                VerticalOptions="End" HorizontalOptions="Center" Margin="0,0,0,28"
+                WidthRequest="80" HeightRequest="80" CornerRadius="40" Padding="0"
+                FontSize="40" TextColor="White" BackgroundColor="#88FFFFFF" BorderColor="White" BorderWidth="3"
+                SemanticProperties.Description="Scatta: tieni fermo il telefono sopra le monete" />
+        <Button Text="✕"
+                Command="{Binding CancelShotCommand}"
+                IsVisible="{Binding IsShotPreview}"
+                VerticalOptions="End" HorizontalOptions="End" Margin="0,0,28,42"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="22" TextColor="White" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Esci senza scattare" />
 
         <!-- Ricomincia: salva la parte acquisita e riparte (solo durante l'acquisizione) -->
         <Button Text="↻"

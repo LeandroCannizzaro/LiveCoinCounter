@@ -118,6 +118,7 @@ public sealed class MosaicPlatformView : AView
             _bounds = canvas.Bounds;
         }
 
+        _fullPreview = view.FullPreview;
         if (view.Preview is { } preview)
         {
             _preview?.Dispose();
@@ -179,6 +180,11 @@ public sealed class MosaicPlatformView : AView
         base.OnDraw(canvas);
         canvas.DrawColor(AColor.Rgb(18, 18, 20));
         var density = Resources!.DisplayMetrics!.Density;
+        if (_fullPreview)
+        {
+            DrawFullPreview(canvas);
+            return;
+        }
 
         if (_tiles.Count == 0 || _bounds.Width <= 0)
         {
@@ -339,6 +345,24 @@ public sealed class MosaicPlatformView : AView
     }
 
     /// <summary>Anteprima della fotocamera in alto a destra, raddrizzata.</summary>
+    private bool _fullPreview;
+
+    /// <summary>L'ultimo fotogramma della telecamera su tutta la vista (intero, centrato), come lo vede l'utente.</summary>
+    private void DrawFullPreview(Canvas canvas)
+    {
+        if (_preview is null) return;
+        var rotated = _previewRotation is 90 or 270;
+        var srcW = rotated ? _preview.Height : _preview.Width;
+        var srcH = rotated ? _preview.Width : _preview.Height;
+        var s = Math.Min(Width / (float)srcW, Height / (float)srcH);
+        canvas.Save();
+        canvas.Translate(Width / 2f, Height / 2f);
+        canvas.Rotate(_previewRotation);
+        canvas.Scale(s, s);
+        canvas.DrawBitmap(_preview, -_preview.Width / 2f, -_preview.Height / 2f, _tilePaint);
+        canvas.Restore();
+    }
+
     private void DrawPreview(Canvas canvas, float density)
     {
         if (_preview is null) return;

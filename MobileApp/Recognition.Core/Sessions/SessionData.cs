@@ -63,6 +63,12 @@ public sealed class SessionRecord
     public int UncertainCount { get; set; }
     public string? Notes { get; set; }
 
+    /// <summary>Scatto singolo: la serie di scatti (su parti diverse del tavolo) a cui appartiene la sessione; null per le altre.</summary>
+    public string? SeriesId { get; set; }
+
+    /// <summary>Posizione dello scatto nella serie (1, 2, ...).</summary>
+    public int ShotIndex { get; set; }
+
     /// <summary>Quando l'utente ha verificato la sessione (conferme, correzioni, monete aggiunte): da qui in poi i dati valgono come "verità".</summary>
     public DateTime? ReviewedAt { get; set; }
 }

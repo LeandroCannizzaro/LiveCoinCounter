@@ -53,14 +53,26 @@ public sealed class CaptureController
     /// <summary>Avviso sul metodo effettivamente usato (es. ARCore non supportato).</summary>
     public string? Note { get; }
 
-    public static async Task<CaptureController> StartLiveAsync()
+    /// <param name="seriesId">Scatto singolo: la serie a cui aggiungere questa sessione (null per l'acquisizione continua).</param>
+    /// <param name="paused">Il motore parte in pausa (si inquadra; lo scatto lo fa partire).</param>
+    public static async Task<CaptureController> StartLiveAsync(string? seriesId = null, bool paused = false)
     {
         var setup = SessionServices.CreateCaptureSetup(SettingsService.CaptureMethod);
         var locator = SessionServices.CreateLocator();
         var repository = SessionServices.Repository;
         var session = await repository.CreateSessionAsync(SessionSource.Live, setup.Tracker.Id, locator.Id, SettingsService.Retention, DateTime.Now);
 
+        if (seriesId is not null)
+        {
+            var shot = (await repository.ListSessionsAsync()).Count(s => s.SeriesId == seriesId) + 1;
+            session.SeriesId = seriesId;
+            session.ShotIndex = shot;
+            session.Name = $"Scatto {shot} · serie delle {SeriesTime(seriesId)}";
+            await repository.UpdateSessionAsync(session);
+        }
+
         var log = SessionDiagnostics.Open(session.Id, "live");
+        if (seriesId is not null) log.Event("series", new { seriesId, shot = session.ShotIndex }, important: true);
         log.Event("session_start", new
         {
             session = session.Id, source = "live", requestedMethod = SettingsService.CaptureMethod, effectiveMethod = setup.Method,
@@ -76,6 +88,7 @@ public sealed class CaptureController
         if (setup.Source is ArCoreFrameSource arcoreInfo)
             arcoreInfo.Info = (what, value) => log.Event("arcore_" + what, new { value }, important: true);
         var controller = new CaptureController(session, engine, setup.Source, sink, setup.Note, log);
+        engine.Paused = paused;
         engine.Start();
 
         try
@@ -96,6 +109,10 @@ public sealed class CaptureController
         }
         return controller;
     }
+
+    /// <summary>L'ora d'inizio di una serie (l'identificativo è «aaaaMMgg-hhmmss»).</summary>
+    private static string SeriesTime(string seriesId) =>
+        seriesId.Length >= 13 ? $"{seriesId[9..11]}:{seriesId[11..13]}" : seriesId;
 
     /// <summary>Una foto dalla galleria: stessa pipeline, un solo fotogramma chiave.</summary>
     public static async Task<CaptureController> StartPhotoAsync(byte[] photo)

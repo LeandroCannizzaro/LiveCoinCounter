@@ -164,6 +164,17 @@ public sealed class CaptureEngine
     private int _framesSeen;
     private int _poorFrames;
     private int _pendingShots;
+    private volatile bool _paused;
+
+    /// <summary>
+    /// In pausa i fotogrammi arrivano (l'anteprima si aggiorna) ma non si elaborano: niente mosaico né monete. Serve allo scatto,
+    /// mentre si inquadra.
+    /// </summary>
+    public bool Paused
+    {
+        get => _paused;
+        set => _paused = value;
+    }
     private long _lastShotNs = long.MinValue;
 
     /// <summary>Tempo minimo tra due scatti dello scatto singolo: fotogrammi un po' diversi (luce, fuoco, rumore) danno ritagli diversi.</summary>
@@ -267,6 +278,7 @@ public sealed class CaptureEngine
     {
         await foreach (var frame in _frames.Reader.ReadAllAsync())
         {
+            if (_paused) continue;
             _busy = true;
             try
             {

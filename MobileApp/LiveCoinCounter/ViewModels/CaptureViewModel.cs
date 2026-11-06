@@ -57,7 +57,9 @@ public sealed class CaptureViewModel : ObservableObject
     {
         ToggleCommand = new Command(async () => await ToggleAsync(), () => _state is State.Idle or State.Capturing);
         ImportPhotoCommand = new Command(async () => await ImportPhotoAsync(), () => _state == State.Idle);
-        SingleShotCommand = new Command(async () => await SingleShotAsync(), () => _state == State.Idle);
+        SingleShotCommand = new Command(async () => await EnterShotModeAsync(DateTime.Now.ToString("yyyyMMdd-HHmmss")), () => _state == State.Idle);
+        ShutterCommand = new Command(async () => await TakeShotAsync(), () => _shotPreview && !_shotRunning);
+        CancelShotCommand = new Command(async () => await CancelShotAsync(), () => _shotPreview && !_shotRunning);
         CancelProcessingCommand = new Command(() => _processingCts?.Cancel());
         RestartCommand = new Command(async () => await RestartAsync(), () => _state == State.Capturing);
         ToggleTorchCommand = new Command(() =>
@@ -110,11 +112,29 @@ public sealed class CaptureViewModel : ObservableObject
 
     /// <summary>Salva la parte acquisita come sessione a sé e ricomincia da capo (utile quando il tracking è perso).</summary>
     public ICommand RestartCommand { get; }
-    public bool CanRestart => _state == State.Capturing;
+    public bool CanRestart => _state == State.Capturing && !_shotPreview;
     public ICommand ImportPhotoCommand { get; }
 
-    /// <summary>Scatto singolo: qualche fotogramma della stessa inquadratura, analizzato come nell'acquisizione continua.</summary>
+    /// <summary>Scatto singolo: apre la telecamera a tutto schermo per inquadrare (una nuova serie di scatti).</summary>
     public ICommand SingleShotCommand { get; }
+
+    /// <summary>Lo scatto: qualche fotogramma della stessa inquadratura, analizzato come nell'acquisizione continua.</summary>
+    public ICommand ShutterCommand { get; }
+
+    /// <summary>Esce dall'inquadratura senza scattare.</summary>
+    public ICommand CancelShotCommand { get; }
+
+    /// <summary>Si sta inquadrando per uno scatto: telecamera a tutto schermo e pulsante di scatto.</summary>
+    public bool IsShotPreview => _shotPreview;
+
+    /// <summary>Il pulsante ▶/■ dell'acquisizione continua (nascosto mentre si inquadra uno scatto).</summary>
+    public bool ShowToggle => !_shotPreview;
+
+    /// <summary>
+    /// Chiesto dalla pila delle superfici («Altro scatto»): alla prossima apertura della schermata si inquadra un altro scatto della
+    /// stessa serie.
+    /// </summary>
+    public static string? PendingShotSeries { get; set; }
     public ICommand CancelProcessingCommand { get; }
 
     /// <summary>Il pulsante alterna i simboli start e stop.</summary>
@@ -123,7 +143,7 @@ public sealed class CaptureViewModel : ObservableObject
     public bool IsIdle => _state == State.Idle;
     public bool IsCapturing => _state is State.Capturing or State.Stopping or State.Starting;
     public bool IsProcessing => _state is State.Processing or State.Stopping;
-    public bool ShowCounter => _state != State.Idle;
+    public bool ShowCounter => _state != State.Idle && !_shotPreview;
 
     public string? Hint
     {
@@ -177,6 +197,12 @@ public sealed class CaptureViewModel : ObservableObject
 
     public async Task OnAppearingAsync()
     {
+        if (PendingShotSeries is { } series && _state == State.Idle)
+        {
+            PendingShotSeries = null;
+            await EnterShotModeAsync(series);
+            return;
+        }
         if (_checkedInterrupted || _state != State.Idle) return;
         _checkedInterrupted = true;
         try
@@ -201,43 +227,98 @@ public sealed class CaptureViewModel : ObservableObject
         }
     }
 
-    /// <summary>Quanti scatti fa lo scatto singolo e quanto si aspetta al massimo (fotogrammi sfocati o tracking non ancora partito).</summary>
+    /// <summary>Quanti fotogrammi fa uno scatto e quanto si aspetta al massimo (fotogrammi sfocati o tracking non ancora partito).</summary>
     private const int SingleShotCount = 3;
     private const int SingleShotTimeoutMs = 6000;
-    private bool _singleShot;
+    private bool _shotPreview;
+    private bool _shotRunning;
+    private string? _shotSeries;
+
+    private void SetShotState(bool preview, bool running)
+    {
+        _shotPreview = preview;
+        _shotRunning = running;
+        if (_view is not null) _view.FullPreview = preview;
+        OnPropertyChanged(nameof(IsShotPreview));
+        OnPropertyChanged(nameof(ShowCounter));
+        OnPropertyChanged(nameof(ShowToggle));
+        OnPropertyChanged(nameof(CanRestart));
+        ((Command)ShutterCommand).ChangeCanExecute();
+        ((Command)CancelShotCommand).ChangeCanExecute();
+    }
 
     /// <summary>
-    /// Scatto singolo: stessa fotocamera, stessa superficie e stesso motore dell'acquisizione continua, ma senza muoversi. Si chiedono
-    /// alcuni scatti della stessa inquadratura; ogni scatto è analizzato e la stessa moneta vista in più scatti tiene il ritaglio
-    /// migliore. Fatti gli scatti (o scaduto il tempo) si chiude come con lo stop.
+    /// Scatto: si apre la telecamera a tutto schermo per inquadrare (il motore è in pausa: niente mosaico finché non si scatta).
+    /// Ogni scatto è una sessione della serie <paramref name="seriesId"/>; gli scatti di una serie si vedono poi come pila di superfici.
     /// </summary>
-    private async Task SingleShotAsync()
+    private async Task EnterShotModeAsync(string seriesId)
     {
         if (_state != State.Idle) return;
-        await StartAsync();
-        if (_state != State.Capturing || _controller is null) return;
+        _shotSeries = seriesId;
+        SetShotState(preview: true, running: false);
+        await StartAsync(seriesId, paused: true);
+        if (_state != State.Capturing || _controller is null)
+        {
+            SetShotState(preview: false, running: false);
+            return;
+        }
+        StatusText = $"Scatto {_controller.Session.ShotIndex}: inquadra le monete e premi ◉";
+    }
 
+    /// <summary>
+    /// Lo scatto: il motore parte e si chiedono alcuni fotogrammi della stessa inquadratura; ognuno è analizzato e la stessa moneta vista
+    /// in più fotogrammi tiene il ritaglio migliore. Poi la telecamera si chiude, si riconoscono i valori e si apre la pila delle superfici.
+    /// </summary>
+    private async Task TakeShotAsync()
+    {
+        if (_controller is null || !_shotPreview || _shotRunning) return;
+        SetShotState(preview: true, running: true);
         var engine = _controller.Engine;
-        _controller.Log.Event("ui_single_shot", new { shots = SingleShotCount }, important: true);
-        _singleShot = true;
-        StatusText = "Scatto: tieni fermo il telefono sopra le monete";
+        _controller.Log.Event("ui_single_shot", new { shots = SingleShotCount, series = _shotSeries }, important: true);
+        StatusText = "Tieni fermo il telefono…";
         engine.RequestShots(SingleShotCount);
+        engine.Paused = false;
         var started = Environment.TickCount64;
         while (_state == State.Capturing && engine.PendingShots > 0 && Environment.TickCount64 - started < SingleShotTimeoutMs)
             await Task.Delay(100);
-        _controller.Log.Event("ui_single_shot_done", new { missing = engine.PendingShots, ms = Environment.TickCount64 - started }, important: true);
-        _singleShot = false;
+        _controller?.Log.Event("ui_single_shot_done", new { missing = engine.PendingShots, ms = Environment.TickCount64 - started }, important: true);
         engine.RequestShots(0);
-        if (_state == State.Capturing) await StopAsync();
+        SetShotState(preview: false, running: false);
+        if (_state == State.Capturing) await StopAsync(openSeries: _shotSeries);
+    }
+
+    /// <summary>Esce dall'inquadratura senza scattare: la sessione vuota si elimina.</summary>
+    private async Task CancelShotAsync()
+    {
+        if (_controller is not { } controller || _shotRunning) return;
+        SetShotState(preview: false, running: false);
+        _controller = null;
+        _lastTracking = null;
+        Hint = null;
+        _timer?.Stop();
+        LockPortrait(false);
+        DeviceDisplay.Current.KeepScreenOn = false;
+        try
+        {
+            await controller.StopAsync();
+            await SessionServices.DeleteSessionAsync(controller.Session.Id);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Annullamento dello scatto: {ex}");
+        }
+        _view?.Clear();
+        SetState(State.Idle);
+        StatusText = "Tocca ▶ e muovi lentamente il telefono sopra il tavolo";
     }
 
     private async Task ToggleAsync()
     {
-        if (_state == State.Idle) await StartAsync();
+        if (_state == State.Idle) await StartAsync(null, paused: false);
         else if (_state == State.Capturing) await StopAsync();
     }
 
-    private async Task StartAsync()
+    private async Task StartAsync(string? seriesId = null, bool paused = false)
     {
         var permission = await Permissions.RequestAsync<Permissions.Camera>();
         if (permission != PermissionStatus.Granted)
@@ -251,7 +332,7 @@ public sealed class CaptureViewModel : ObservableObject
         _view?.Clear();
         try
         {
-            _controller = await CaptureController.StartLiveAsync();
+            _controller = await CaptureController.StartLiveAsync(seriesId, paused);
             AttachEngine(_controller);
             SetState(State.Capturing);
             StatusText = _controller.Note ?? "Muovi lentamente il telefono, parallelo al tavolo";
@@ -271,6 +352,7 @@ public sealed class CaptureViewModel : ObservableObject
     {
         var engine = controller.Engine;
         CoinCount = 0;
+        _lastTracking = null;      // niente avvisi rimasti dalla sessione precedente (es. dallo scatto prima)
         Hint = null;
         _loggedHint = null;
         _lastError = null;
@@ -341,7 +423,7 @@ public sealed class CaptureViewModel : ObservableObject
                 shown = update.Featureless
                     ? "Tavolo vuoto: torna dove vedi le monete (o tocca ↻ per ricominciare)"
                     : "Posizione persa: segui la freccia e cerca la zona nella foto (o tocca ↻ per ricominciare)";
-            if (_singleShot && !lost) shown = "📷 Tieni fermo il telefono: scatto in corso…";
+            if (_shotRunning && !lost) shown = "📷 Tieni fermo il telefono: scatto in corso…";
             Hint = StickyHint(shown, important: lost);
 
             // immagini sfocate con luce sufficiente: prova a rimettere a fuoco (al massimo ogni 5 secondi)
@@ -396,7 +478,8 @@ public sealed class CaptureViewModel : ObservableObject
         if (!ReferenceEquals(frame, _latestFrame))
         {
             _latestFrame = frame;
-            _view.Preview = frame is null ? null : ImageOps.Downscale(frame.Image, 240);
+            // mentre si inquadra lo scatto l'anteprima è a tutto schermo: serve più grande
+            _view.Preview = frame is null ? null : ImageOps.Downscale(frame.Image, _shotPreview ? 960 : 240);
             _view.PreviewRotation = frame?.RotationDegrees ?? 0;
         }
 
@@ -487,7 +570,7 @@ public sealed class CaptureViewModel : ObservableObject
         }
     }
 
-    private async Task StopAsync()
+    private async Task StopAsync(string? openSeries = null)
     {
         if (_controller is null) return;
         _controller.Log.Event("ui_stop", new { status = _lastTracking?.Status, keyframes = _lastTracking?.Keyframes }, important: true);
@@ -501,7 +584,7 @@ public sealed class CaptureViewModel : ObservableObject
             await _controller.StopAsync();
             OnTick(null, EventArgs.Empty);
             if (_view is not null) _view.FrameQuad = null;
-            await ProcessAndOpenAsync(_controller.Session.Id);
+            await ProcessAndOpenAsync(_controller.Session.Id, openSeries);
         }
         catch (Exception ex)
         {
@@ -575,7 +658,7 @@ public sealed class CaptureViewModel : ObservableObject
     }
 
     /// <summary>Riconoscimento del valore di ogni ritaglio, poi il riepilogo.</summary>
-    private async Task ProcessAndOpenAsync(string sessionId)
+    private async Task ProcessAndOpenAsync(string sessionId, string? openSeries = null)
     {
         SetState(State.Processing);
         _processingCts = new CancellationTokenSource();
@@ -603,7 +686,10 @@ public sealed class CaptureViewModel : ObservableObject
             Finish();
         }
 
-        await Shell.Current.GoToAsync($"session?id={Uri.EscapeDataString(sessionId)}");
+        if (openSeries is not null)
+            await Shell.Current.GoToAsync($"surface?series={Uri.EscapeDataString(openSeries)}");
+        else
+            await Shell.Current.GoToAsync($"session?id={Uri.EscapeDataString(sessionId)}");
     }
 
     private void Finish()
