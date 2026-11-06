@@ -30,6 +30,14 @@ public sealed class ArCoreFrameSource : IFrameSource
 
     public string Id => "arcore";
 
+    /// <summary>
+    /// Un errore nel ciclo di ARCore (dove: "plane", "frame", "loop"). Prima il ciclo si fermava al primo errore senza dire nulla:
+    /// nelle prove con il metodo Ibrido arrivavano 4 fotogrammi e poi più niente.
+    /// </summary>
+    public Action<string, Exception>? Failed { get; set; }
+
+    private const int MaxConsecutiveErrors = 30;
+
     /// <summary>ARCore è supportato su questo telefono (anche se non ancora installato)?</summary>
     public static bool IsSupported(Context context)
     {
@@ -95,44 +103,62 @@ public sealed class ArCoreFrameSource : IFrameSource
             var rotation = SensorOrientation(context, session.CameraConfig.CameraId);
             _started?.TrySetResult();
 
+            var errors = 0;
+            var planeFailed = false;
             while (_running)
             {
-                var frame = session.Update();
-                var camera = frame.Camera;
-                var tracking = camera.TrackingState == TrackingState.Tracking;
-                if (tracking && _lockedPlane is null) _lockedPlane = FindTablePlane(session);
-                if (_wantsFrame?.Invoke() != true) continue;
-
-                global::Android.Media.Image? image = null;
                 try
                 {
-                    image = frame.AcquireCameraImage();
-                }
-                catch (Com.Google.AR.Core.Exceptions.NotYetAvailableException)
-                {
-                    continue;
-                }
+                    var frame = session.Update();
+                    var camera = frame.Camera;
+                    var tracking = camera.TrackingState == TrackingState.Tracking;
+                    if (tracking && _lockedPlane is null && !planeFailed)
+                    {
+                        // la ricerca del piano non deve fermare i fotogrammi: se fallisce si prosegue senza piano (e lo si dice)
+                        try { _lockedPlane = FindTablePlane(session); }
+                        catch (Exception ex) { planeFailed = true; Failed?.Invoke("plane", ex); }
+                    }
+                    if (_wantsFrame?.Invoke() != true) continue;
 
-                using (image)
+                    global::Android.Media.Image? image;
+                    try
+                    {
+                        image = frame.AcquireCameraImage();
+                    }
+                    catch (Com.Google.AR.Core.Exceptions.NotYetAvailableException)
+                    {
+                        continue;
+                    }
+
+                    using (image)
+                    {
+                        var argb = ToArgb(image);
+                        var intrinsics = camera.ImageIntrinsics!;
+                        var focal = intrinsics.GetFocalLength()!;
+                        var principal = intrinsics.GetPrincipalPoint()!;
+                        var dims = intrinsics.GetImageDimensions()!;
+                        // se l'immagine CPU ha una risoluzione diversa da quella degli intrinseci si riscalano
+                        var sx = argb.Width / (double)dims[0];
+                        var sy = argb.Height / (double)dims[1];
+                        var k = new CameraIntrinsics(focal[0] * sx, focal[1] * sy, principal[0] * sx, principal[1] * sy, argb.Width, argb.Height);
+                        var pose = new PlanarPose(k, Convert(camera.Pose!), _lockedPlane, tracking);
+                        _onFrame?.Invoke(new CameraFrame(argb, frame.Timestamp, rotation, pose));
+                    }
+                    errors = 0;
+                }
+                catch (Exception ex)
                 {
-                    var argb = ToArgb(image);
-                    var intrinsics = camera.ImageIntrinsics!;
-                    var focal = intrinsics.GetFocalLength()!;
-                    var principal = intrinsics.GetPrincipalPoint()!;
-                    var dims = intrinsics.GetImageDimensions()!;
-                    // se l'immagine CPU ha una risoluzione diversa da quella degli intrinseci si riscalano
-                    var sx = argb.Width / (double)dims[0];
-                    var sy = argb.Height / (double)dims[1];
-                    var k = new CameraIntrinsics(focal[0] * sx, focal[1] * sy, principal[0] * sx, principal[1] * sy, argb.Width, argb.Height);
-                    var pose = new PlanarPose(k, Convert(camera.Pose!), _lockedPlane, tracking);
-                    _onFrame?.Invoke(new CameraFrame(argb, frame.Timestamp, rotation, pose));
+                    // un fotogramma andato male non ferma tutto; tanti di fila sì
+                    if (errors++ == 0) Failed?.Invoke("frame", ex);
+                    if (errors >= MaxConsecutiveErrors) throw;
+                    Thread.Sleep(20);
                 }
             }
         }
         catch (Exception ex)
         {
             if (_started is { Task.IsCompleted: false }) _started.TrySetException(ex);
-            else System.Diagnostics.Debug.WriteLine($"ARCore interrotto: {ex}");
+            else Failed?.Invoke("loop", ex);
         }
         finally
         {

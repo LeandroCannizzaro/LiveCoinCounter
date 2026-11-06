@@ -101,8 +101,10 @@ public sealed class SessionClassifier
                         c.X + c.Width / 2, c.Y + c.Height / 2, c.ColorTint)
                     : null)
             .Where(i => i is not null).Cast<DiameterCheck.Item>().ToList();
-        var markers = SessionMarkers.Parse(session.MarkersJson);
-        var checkedItems = DiameterCheck.Apply(items, session.PxPerMm, markers).ToDictionary(i => i.CoinId);
+        // i marker non entrano nel controllo del taglio: con la scala dei marker le monete risultano il 10% più grandi del vero
+        // (riquadro del rilevatore più largo della moneta, foglio forse stampato ridotto) e gli 1 cent diventavano 2 cent.
+        // Il controllo usa la scala relativa tra le monete, che questo errore non lo vede.
+        var checkedItems = DiameterCheck.Apply(items, session.PxPerMm).ToDictionary(i => i.CoinId);
 
         foreach (var coin in todo)
         {

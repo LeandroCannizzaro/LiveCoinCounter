@@ -1,5 +1,6 @@
 using LiveCoinCounter.Diagnostics;
 using LiveCoinCounter.Mosaic;
+using LiveCoinCounter.Platforms.Android.Capture;
 using LiveCoinCounter.Sessions;
 
 namespace LiveCoinCounter.Services.Sessions;
@@ -70,6 +71,8 @@ public sealed class CaptureController
         var markerDetector = SessionServices.CreateMarkerDetector();
         log.Event("marker_detector", new { available = markerDetector is not null });
         var engine = new CaptureEngine(setup.Tracker, locator, sink, new MosaicCanvas(), log: log, markerDetector: markerDetector);
+        if (setup.Source is ArCoreFrameSource arcore)
+            arcore.Failed = (where, ex) => log.Event("error", new { where = "arcore_" + where, message = ex.Message, type = ex.GetType().Name, stack = ex.ToString() }, important: true);
         var controller = new CaptureController(session, engine, setup.Source, sink, setup.Note, log);
         engine.Start();
 

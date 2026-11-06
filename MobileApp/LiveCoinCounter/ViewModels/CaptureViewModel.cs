@@ -39,6 +39,8 @@ public sealed class CaptureViewModel : ObservableObject
     private bool _scaleDirty = true;
     private int _lastMarkerCount;
     private int _markerCount;
+    private CameraFrame? _watchFrame;
+    private long _watchTick;
     private SurfaceScale? _gridScale;
     private bool _torchOn;
     private long _lastRefocusTick;
@@ -242,6 +244,7 @@ public sealed class CaptureViewModel : ObservableObject
         _scaleDirty = true;
         MarkerCount = 0;
         _lastMarkerCount = 0;
+        _watchTick = 0;
         _torchOn = false;
         OnPropertyChanged(nameof(TorchSymbol));
         while (_changedTiles.TryDequeue(out _)) { }
@@ -297,6 +300,9 @@ public sealed class CaptureViewModel : ObservableObject
             LastGoodImage = lost ? _lastGoodHolder : null;
 
             var shown = update.Hint ?? (update.PendingDetections > 3 ? "Analisi in corso: rallenta un po'" : null);
+            // monete troppo piccole nell'inquadratura: il taglio si legge male (1 cent scambiati per 2 cent)
+            if (shown is null && capturing && engine.LastCoinDiameterPx is > 0 and < CaptureEngine.SmallCoinDiameterPx)
+                shown = "Avvicina il telefono (circa 25 cm): le monete sono piccole e il valore si legge male";
             if (lost && update.Recovery is not null)
                 shown = update.Featureless
                     ? "Tavolo vuoto: torna dove vedi le monete (o tocca ↻ per ricominciare)"
@@ -308,6 +314,24 @@ public sealed class CaptureViewModel : ObservableObject
             {
                 _lastRefocusTick = Environment.TickCount64;
                 _controller.Refocus();
+            }
+        }
+
+        // la fotocamera ha smesso di mandare immagini (è successo con ARCore): lo si dice invece di lasciare la schermata ferma
+        if (_state == State.Capturing)
+        {
+            var latest = _controller.LatestFrame;
+            var now = Environment.TickCount64;
+            if (_watchTick == 0 || !ReferenceEquals(latest, _watchFrame))
+            {
+                _watchFrame = latest;
+                _watchTick = now;
+            }
+            else if (now - _watchTick > 3000)
+            {
+                Hint = SettingsService.CaptureMethod == CaptureMethod.OpenCv
+                    ? "La fotocamera non manda immagini: ferma e riprova"
+                    : "ARCore non manda immagini: ferma e scegli il metodo OpenCV nelle impostazioni";
             }
         }
 

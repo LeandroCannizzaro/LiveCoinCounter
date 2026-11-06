@@ -47,3 +47,6 @@ L'addestramento vero si fa su **Kaggle** o **Google Colab** (GPU gratuita); il P
 - [x] Fase 3: programma di etichettatura con AI (`CoinLabeler/` (progetto .NET in questa cartella); provato solo per i box, non ancora con una chiave AI reale)
 - [x] Fase 6 (prima prova): baseline YOLO11n su Kaggle, test 98,3% di totale esatto su 59 foto dei dataset pubblici, **non** indicativo del caso reale (vedi `training/RESULTS.md`)
 - [ ] Fasi 4, 5, 7-9: foto proprie, test set riservato, confronto strategie, integrazione nell'app
+  - Foto proprie dalle sessioni dell'app: `MobileApp/Tools/label-sessions.js` etichetta le sessioni fatte con un set di monete noto
+    (ritagli in `crops/<valore>/`, fotogrammi interi con JSON in `images/`, stato `auto` solo se tutte le monete sono sicure).
+    Uscita in `datasets/processed/own-phone-sessions/` (non va nel repository).

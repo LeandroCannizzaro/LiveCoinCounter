@@ -356,6 +356,32 @@ public static class DetectionFilter
         return box.Diameter >= 8 ? "ok" : "small";
     }
 
+    /// <summary>Due monete appoggiate sul tavolo non possono avere i centri più vicini di questa frazione del diametro.</summary>
+    public const float SameCoinDistance = 0.5f;
+
+    /// <summary>
+    /// Il rilevatore a volte disegna due riquadri sovrapposti sulla stessa moneta (anche con tagli diversi): il filtro interno li
+    /// toglie solo oltre il 60% di sovrapposizione. Qui si tiene il più sicuro di ogni gruppo con i centri a meno di
+    /// <see cref="SameCoinDistance"/> diametri. Restituisce gli indici da tenere, nell'ordine originale.
+    /// </summary>
+    public static IReadOnlyList<int> SuppressSameCoin(IReadOnlyList<RectF> boxes, IReadOnlyList<float> confidences)
+    {
+        var kept = new List<int>();
+        foreach (var i in Enumerable.Range(0, boxes.Count).OrderByDescending(i => confidences[i]))
+        {
+            var b = boxes[i];
+            var duplicate = kept.Any(k =>
+            {
+                var o = boxes[k];
+                var d = Math.Sqrt(Math.Pow(o.CenterX - b.CenterX, 2) + Math.Pow(o.CenterY - b.CenterY, 2));
+                return d < SameCoinDistance * (o.Diameter + b.Diameter) / 2;
+            });
+            if (!duplicate) kept.Add(i);
+        }
+        kept.Sort();
+        return kept;
+    }
+
     /// <summary>Qualità di un'osservazione: più alta per monete vicine al centro del fotogramma.</summary>
     public static float Centrality(RectF box, int frameWidth, int frameHeight)
     {

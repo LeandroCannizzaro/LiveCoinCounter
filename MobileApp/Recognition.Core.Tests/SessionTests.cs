@@ -71,6 +71,15 @@ public class CoinRegistryTests
     }
 
     [Fact]
+    public void Two_boxes_on_the_same_coin_keep_only_the_most_confident()
+    {
+        // caso reale: stesso 2 cent rilevato due volte (0,68 e 0,55), centri a 0,21 diametri; a fianco una moneta vera che tocca
+        var boxes = new[] { new RectF(100, 100, 50, 50), new RectF(110, 102, 52, 50), new RectF(152, 100, 50, 50) };
+        var kept = DetectionFilter.SuppressSameCoin(boxes, new[] { 0.55f, 0.68f, 0.9f });
+        Assert.Equal(new[] { 1, 2 }, kept);
+    }
+
+    [Fact]
     public void Coins_in_the_same_keyframe_are_never_merged_even_if_overlapping()
     {
         var registry = new CoinRegistry();

@@ -174,6 +174,15 @@ public sealed class CaptureEngine
     public MosaicCanvas Canvas { get; }
     public CoinRegistry Coins { get; } = new();
 
+    /// <summary>
+    /// Diametro mediano (pixel del fotogramma) delle monete dell'ultimo fotogramma chiave analizzato, 0 se non ce n'erano.
+    /// Nelle prove sotto gli 80 px circa gli 1 cent venivano letti come 2 cent: serve a chiedere di avvicinarsi.
+    /// </summary>
+    public float LastCoinDiameterPx { get; private set; }
+
+    /// <summary>Sotto questo diametro (pixel del fotogramma) le monete sono troppo piccole per riconoscere bene il taglio.</summary>
+    public const float SmallCoinDiameterPx = 75;
+
     /// <summary>I marker di scala visti finora, sul mosaico (vuoto se non c'è un rilevatore di marker).</summary>
     public MarkerRegistry Markers { get; } = new();
     public int KeyframeCount => _keyframeCount;
@@ -490,6 +499,7 @@ public sealed class CaptureEngine
 
         // prima i riquadri utilizzabili, poi l'abbinamento alle monete note, per tutto il fotogramma insieme
         var usable = new List<(CoinBox Coin, RectF MosaicBox, float Quality)>();
+        var inFrame = new List<CoinBox>();
         foreach (var coin in boxes)
         {
             if (!DetectionFilter.IsUsable(coin.Box, image.Width, image.Height))
@@ -497,8 +507,28 @@ public sealed class CaptureEngine
                 logged?.Add(new { box = DiagData.Box(coin.Box), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents, use = DetectionFilter.Reason(coin.Box, image.Width, image.Height) });
                 continue;
             }
+            inFrame.Add(coin);
+        }
+
+        // due riquadri sulla stessa moneta: si tiene il più sicuro (altrimenti diventerebbero due monete)
+        var keep = DetectionFilter.SuppressSameCoin(inFrame.Select(c => c.Box).ToList(), inFrame.Select(c => c.Confidence).ToList());
+        for (var i = 0; i < inFrame.Count; i++)
+        {
+            var coin = inFrame[i];
+            if (!keep.Contains(i))
+            {
+                logged?.Add(new { box = DiagData.Box(coin.Box), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents, use = "same_coin" });
+                continue;
+            }
+            // la vista migliore di una moneta è anche la più ravvicinata: il ritaglio di una moneta piccola è povero di dettagli
+            var size = Math.Clamp(coin.Box.Diameter / 100f, 0.3f, 1f);
             usable.Add((coin, keyframe.FrameToMosaic.MapBox(coin.Box),
-                DetectionFilter.Centrality(coin.Box, image.Width, image.Height) * keyframe.Quality));
+                DetectionFilter.Centrality(coin.Box, image.Width, image.Height) * keyframe.Quality * size));
+        }
+        if (usable.Count > 0)
+        {
+            var diameters = usable.Select(u => u.Coin.Box.Diameter).OrderBy(d => d).ToList();
+            LastCoinDiameterPx = diameters[diameters.Count / 2];
         }
         var updates = Coins.ObserveKeyframe(usable.Select(u => new CoinObservation(u.Coin.Box, u.MosaicBox, u.Coin.Confidence, u.Quality,
             keyframe.Index, u.Coin.Cents, u.Coin.ClassConfidence)).ToList());
@@ -524,7 +554,7 @@ public sealed class CaptureEngine
         _log.Event("detect", new
         {
             keyframe = keyframe.Index, locateMs = DiagData.R(locateMs), totalMs = DiagData.R(timer.Elapsed.TotalMilliseconds),
-            raw = boxes.Count, accepted = changes.Count, tracks = Coins.Count, boxes = logged
+            raw = boxes.Count, accepted = changes.Count, tracks = Coins.Count, coinDiameterPx = DiagData.R(LastCoinDiameterPx, 0), boxes = logged
         });
 
         if (changes.Count == 0) return;
