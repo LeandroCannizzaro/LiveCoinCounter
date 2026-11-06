@@ -130,7 +130,10 @@ public sealed class ArCoreFrameSource : IFrameSource
                         continue;
                     }
 
-                    using (image)
+                    // Close() va chiamato esplicitamente: Dispose() di .NET rilascia solo il riferimento JNI, l'immagine resta aperta e
+                    // dopo 4 immagini ARCore risponde ResourceExhaustedException (succedeva in tutte le prove con Ibrido e ARCore)
+                    using var imageRef = image;
+                    try
                     {
                         var argb = ToArgb(image);
                         var intrinsics = camera.ImageIntrinsics!;
@@ -143,6 +146,10 @@ public sealed class ArCoreFrameSource : IFrameSource
                         var k = new CameraIntrinsics(focal[0] * sx, focal[1] * sy, principal[0] * sx, principal[1] * sy, argb.Width, argb.Height);
                         var pose = new PlanarPose(k, Convert(camera.Pose!), _lockedPlane, tracking);
                         _onFrame?.Invoke(new CameraFrame(argb, frame.Timestamp, rotation, pose));
+                    }
+                    finally
+                    {
+                        image.Close();
                     }
                     errors = 0;
                 }
