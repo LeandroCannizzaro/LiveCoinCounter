@@ -90,6 +90,14 @@ public partial class SurfacePage : ContentPage
         _offsetY = Surface.TranslationY;
     }
 
+    /// <summary>Tocco singolo: con i riquadri spenti mostra o nasconde la moneta toccata (si risale al punto senza zoom).</summary>
+    private void OnSingleTapped(object? sender, TappedEventArgs e)
+    {
+        var p = e.GetPosition(Stage);
+        if (p is null || Surface.Width <= 0) return;
+        _viewModel.TapAt((p.Value.X - Surface.TranslationX) / _scale, (p.Value.Y - Surface.TranslationY) / _scale, Surface.Width, Surface.Height);
+    }
+
     /// <summary>Applica zoom e spostamento tenendo l'immagine dentro lo schermo (niente bordi vuoti a sinistra o in alto).</summary>
     private void Apply(double scale, double x, double y)
     {

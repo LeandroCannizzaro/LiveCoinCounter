@@ -16,6 +16,7 @@
                 <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
                 <PanGestureRecognizer PanUpdated="OnPanUpdated" />
                 <TapGestureRecognizer NumberOfTapsRequired="2" Tapped="OnDoubleTapped" />
+                <TapGestureRecognizer NumberOfTapsRequired="1" Tapped="OnSingleTapped" />
             </Grid.GestureRecognizers>
             <Image x:Name="Surface" Source="{Binding Image}" Aspect="AspectFit" />
         </Grid>
@@ -30,6 +31,12 @@
                 <Label Text="Pizzica per ingrandire · doppio tocco per ingrandire o tornare intero" TextColor="#BBFFFFFF" FontSize="11" />
             </VerticalStackLayout>
         </Grid>
+
+        <!-- I dati della moneta toccata (solo con i riquadri spenti) -->
+        <Border IsVisible="{Binding HasDetail}" VerticalOptions="Start" Margin="12,112,12,0" Padding="12,8" StrokeThickness="0"
+                StrokeShape="RoundRectangle 12" BackgroundColor="#DD1A1A1E" InputTransparent="True">
+            <Label Text="{Binding DetailText}" TextColor="White" FontSize="12" LineBreakMode="WordWrap" />
+        </Border>
 
         <!-- In basso: cosa mostrare -->
         <Border VerticalOptions="End" Margin="12,0,12,24" Padding="14,10" StrokeThickness="0" StrokeShape="RoundRectangle 16" BackgroundColor="#CC1A1A1E">

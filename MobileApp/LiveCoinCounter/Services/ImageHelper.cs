@@ -135,7 +135,8 @@ public static class ImageHelper
 
             if (options.Grid is { IsOff: false } grid && options.Scale is { } scale)
                 DrawGrid(canvas, bitmap.Width, bitmap.Height, session, scale, grid, unit);
-            if (!options.Boxes) return Encode(bitmap);
+            var revealed = options.Revealed;
+            if (!options.Boxes && (revealed is null || revealed.Count == 0)) return Encode(bitmap);
             using var box = new Android.Graphics.Paint { AntiAlias = true, StrokeWidth = Math.Max(2f, unit * 1.2f) };
             box.SetStyle(Android.Graphics.Paint.Style.Stroke);
             using var text = new Android.Graphics.Paint { AntiAlias = true, TextSize = Math.Max(12f, unit * 7f), FakeBoldText = true, Color = Android.Graphics.Color.Black };
@@ -144,6 +145,7 @@ public static class ImageHelper
             foreach (var c in coins)
             {
                 if (c.IsManual) continue;   // aggiunta a mano: non ha una posizione nel mosaico
+                if (!options.Boxes && revealed?.Contains(c.Number) != true) continue;
                 var color = c.State switch
                 {
                     LiveCoinCounter.Sessions.CoinState.Rejected => Android.Graphics.Color.Rgb(150, 150, 150),
@@ -157,6 +159,7 @@ public static class ImageHelper
                 var w = c.Width * s;
                 var h = c.Height * s;
                 box.Color = color;
+                box.StrokeWidth = Math.Max(2f, unit * (options.Selected == c.Number ? 2.6f : 1.2f));
                 canvas.DrawRect(x, y, x + w, y + h, box);
 
                 // il numero corrisponde a «Moneta N» nell'elenco: così si trova sul mosaico la moneta da correggere
@@ -174,6 +177,14 @@ public static class ImageHelper
         {
             return null;
         }
+    }
+
+    /// <summary>Larghezza e altezza di un'immagine codificata, senza decodificarla tutta.</summary>
+    public static (int Width, int Height) SizeOf(byte[] encoded)
+    {
+        var bounds = new BitmapFactory.Options { InJustDecodeBounds = true };
+        BitmapFactory.DecodeByteArray(encoded, 0, encoded.Length, bounds);
+        return (bounds.OutWidth, bounds.OutHeight);
     }
 
     private static byte[] Encode(Bitmap bitmap)
