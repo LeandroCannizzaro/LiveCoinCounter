@@ -28,9 +28,18 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
     public SurfaceViewModel()
     {
         CloseCommand = new Command(async () => await Shell.Current.GoToAsync(".."));
+        EditCommand = new Command(async () =>
+        {
+            // la stessa pagina di correzione dell'elenco monete: valore errato, doppione, non è una moneta...
+            if (_selected is { } number && _coins.FirstOrDefault(c => c.Number == number) is { } coin)
+                await Shell.Current.GoToAsync($"coin?id={coin.Id}");
+        });
     }
 
     public ICommand CloseCommand { get; }
+
+    /// <summary>Corregge la moneta selezionata; poi si torna qui e il riquadro ha il colore delle monete modificate.</summary>
+    public ICommand EditCommand { get; }
 
     public ImageSource? Image
     {
@@ -114,7 +123,7 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
 
     public async Task LoadAsync()
     {
-        if (_sessionId is null || _loaded) return;
+        if (_sessionId is null) return;
         _session = await SessionServices.Repository.GetSessionAsync(_sessionId);
         if (_session is null) return;
         _coins = await SessionServices.Repository.ListCoinsAsync(_sessionId);
@@ -122,6 +131,13 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
         _options = SurfaceOptions.For(_sessionId);
         _options.Configure(_scale);
         _loaded = true;
+
+        // al ritorno dalla correzione la moneta selezionata ha dati nuovi (valore, scartata...)
+        if (_selected is { } number)
+        {
+            var coin = _coins.FirstOrDefault(c => c.Number == number);
+            if (coin is null) Select(null); else Select(coin);
+        }
         await RenderAsync();
     }
 
