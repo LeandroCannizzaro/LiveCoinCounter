@@ -47,6 +47,32 @@ public static class YoloDecoder
     }
 
     /// <summary>
+    /// Punteggi di tutte le classi per l'ancora più sicura: serve al classificatore sul ritaglio (una sola moneta) per
+    /// avere il secondo taglio più probabile. Null se nessuna ancora supera <paramref name="minScore"/>.
+    /// </summary>
+    public static (Detection Best, float[] Scores)? BestAnchorScores(ReadOnlySpan<float> output, int anchors, int classes, float minScore = 0.05f)
+    {
+        if (output.Length != (4 + classes) * anchors)
+            throw new ArgumentException($"Uscita di {output.Length} valori, attesi {(4 + classes) * anchors}.");
+
+        var bestAnchor = -1;
+        var bestScore = minScore;
+        var bestClass = 0;
+        for (var a = 0; a < anchors; a++)
+        for (var c = 0; c < classes; c++)
+        {
+            var score = output[(4 + c) * anchors + a];
+            if (score > bestScore) { bestScore = score; bestAnchor = a; bestClass = c; }
+        }
+        if (bestAnchor < 0) return null;
+
+        var scores = new float[classes];
+        for (var c = 0; c < classes; c++) scores[c] = output[(4 + c) * anchors + bestAnchor];
+        float cx = output[bestAnchor], cy = output[anchors + bestAnchor], w = output[2 * anchors + bestAnchor], h = output[3 * anchors + bestAnchor];
+        return (new Detection(bestClass, bestScore, cx - w / 2, cy - h / 2, w, h), scores);
+    }
+
+    /// <summary>
     /// NMS: tiene il riquadro più sicuro e scarta quelli che lo coprono troppo. Con <paramref name="classAgnostic"/> il
     /// confronto vale anche tra classi diverse: la stessa moneta non può essere contata due volte con tagli diversi.
     /// </summary>

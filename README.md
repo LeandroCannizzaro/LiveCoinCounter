@@ -1,8 +1,10 @@
 # LiveCoinCounter
 
-App Android che conta le monete euro in una foto e ne calcola il totale. Sul telefono si chiama **Conteggio Monete** (il progetto e il repository si chiamano LiveCoinCounter). Si scatta (o si sceglie) una foto, si tocca **Analizza** e l'app mostra quante monete di ogni taglio ci sono e quanto valgono in tutto.
+App Android che conta le monete euro su un tavolo e ne calcola il totale. Sul telefono si chiama **Conteggio Monete** (il progetto e il repository si chiamano LiveCoinCounter).
 
-Il riconoscimento può funzionare in tre modi, selezionabili nelle impostazioni. Il metodo predefinito è **Offline · YOLO11s 640**:
+Il conteggio è una **sessione di riconoscimento continuo**: si tocca ▶ e si muove il telefono sopra il tavolo; l'app compone i fotogrammi in un **mosaico** dell'intera superficie (anche un tavolo intero, senza zone doppie) e intanto, su un altro thread, trova e ritaglia ogni moneta. Con ■ l'acquisizione si ferma, ogni ritaglio passa al riconoscitore del valore e compare il riepilogo. Ogni sessione resta salvata (database SQLite sul telefono) con mosaico, monete, valori e confidenze. Piano e decisioni: issue #6.
+
+Il riconoscimento del valore può funzionare in tre modi, selezionabili nelle impostazioni. Il metodo predefinito è **Offline · YOLO11s 640**:
 
 - **Offline, con un modello addestrato** (YOLO11 in formato ONNX): gira sul telefono, senza rete e senza inviare la foto a nessuno. È il metodo su cui si sta lavorando di più.
 - **AI in rete**: la foto è inviata a un provider (Google Gemini, Anthropic Claude, OpenAI, xAI Grok, DeepSeek, Mistral, OpenRouter o un endpoint OpenAI-compatibile personalizzato).
@@ -13,6 +15,7 @@ Il riconoscimento può funzionare in tre modi, selezionabili nelle impostazioni.
 ## Indice
 
 - [Funzioni](#funzioni)
+- [Riconoscimento continuo e sessioni](#riconoscimento-continuo-e-sessioni)
 - [Installare l'app](#installare-limapp)
 - [Come si usa](#come-si-usa)
 - [Metodi di riconoscimento](#metodi-di-riconoscimento)
@@ -28,11 +31,13 @@ Il riconoscimento può funzionare in tre modi, selezionabili nelle impostazioni.
 
 ## Funzioni
 
-- Foto dalla fotocamera o dalla galleria.
+- **Riconoscimento continuo**: mosaico del tavolo che cresce sullo schermo, riquadro su ogni moneta trovata, pulsante trasparente ▶ / ■.
+- **Sessioni salvate**: elenco, riepilogo, elenco delle monete con ritaglio, valore e confidenza, correzione manuale, rinomina, eliminazione, esportazione zip.
+- Importazione di una foto dalla galleria (diventa una sessione con un solo fotogramma).
 - Conteggio per taglio (1, 2, 5, 10, 20, 50 centesimi, 1 €, 2 €) e totale in euro.
 - Più modelli offline selezionabili, con la possibilità di aggiungerne altri senza scrivere codice.
 - Riquadri sulle monete riconosciute e **avvisi** quando il modello è incerto (monete poco riconoscibili, monete di taglio diverso che si sovrappongono).
-- Pulsante per **rifare l'analisi con l'AI in rete** quando il risultato offline non convince, e per segnalare «Il conteggio è sbagliato».
+- **AI in rete sulle monete incerte** (su richiesta, mai, o in automatico: si sceglie nelle impostazioni); all'AI vanno solo i ritagli delle singole monete.
 - Raccolta facoltativa (spenta di default) delle foto analizzate e dei risultati, per migliorare il modello: le foto restano sul telefono finché non le esporti tu.
 - Chiavi API salvate nello storage sicuro di Android; ritentativi automatici sugli errori di rete (cambio Wi-Fi / dati mobili).
 
@@ -50,10 +55,30 @@ L'APK è firmato con una chiave fissa: le versioni successive si installano sopr
 
 ## Come si usa
 
-1. Metti le monete su una superficie, meglio se **ben separate e su uno sfondo uniforme**, con luce il più possibile uniforme.
-2. Scatta o scegli la foto, poi tocca **Analizza**.
-3. Leggi il totale e il dettaglio per taglio. Se compare un avviso di incertezza, riprova con una foto migliore oppure usa «Riprova con l'AI».
-4. Per cambiare metodo o modello apri le **Impostazioni**.
+1. Metti le monete sul tavolo, **senza sovrapporle**, con una luce il più possibile uniforme. Durante la sessione non vanno spostate.
+2. Nella scheda **Conta** tocca **▶**, tieni il telefono parallelo al tavolo a 25–40 cm e muovilo **lentamente**: il mosaico cresce sullo schermo, ogni moneta trovata riceve un riquadro (grigio = vista una volta, verde = confermata) e in alto c'è il numero di monete.
+3. Quando hai coperto tutto tocca **■**: l'app analizza le ultime monete, ne riconosce il valore e apre il riepilogo.
+4. Nel riepilogo **Vedi tutte le monete** mostra ritaglio, valore e confidenza di ognuna; toccane una per correggerla. Se ci sono monete incerte puoi riprovarle con l'AI.
+5. Le sessioni passate sono nella scheda **Sessioni** (⋯ per rinominare, esportare o eliminare). Il pulsante 🖼 nella scheda Conta analizza invece una foto della galleria.
+
+## Riconoscimento continuo e sessioni
+
+Durante l'acquisizione lavorano due thread, collegati da code (`System.Threading.Channels`):
+
+1. **Tracking e mosaico.** Ogni fotogramma viene collocato sul piano del tavolo con un'omografia; quando porta abbastanza superficie nuova (e non è mosso) diventa **fotogramma chiave** ed è proiettato nel mosaico a tessere. Dove i fotogrammi si sovrappongono vince il pixel migliore (più nitido, più lontano dal bordo): nessuna zona doppia.
+2. **Rilevamento.** Su ogni fotogramma chiave il modello trova le monete (solo localizzazione). Le monete che toccano il bordo si scartano (compariranno intere altrove); le altre si portano nelle coordinate del mosaico e si **deduplicano**, così ogni moneta fisica è una sola riga nel database, con il ritaglio dalla sua osservazione migliore.
+
+Dopo lo stop ogni ritaglio passa al classificatore (oggi lo stesso YOLO sul ritaglio, con il taglio del rilevatore come seconda opinione), poi un controllo sul **diametro relativo** (tutte le monete del mosaico hanno la stessa scala) abbassa la confidenza o corregge il taglio delle monete incoerenti.
+
+Impostazioni (scheda Impostazioni → Riconoscimento continuo):
+
+| Impostazione | Valori (predefinito in grassetto) |
+|---|---|
+| Metodo di composizione | **OpenCV** (punti ORB, tutti i telefoni) · ARCore (posa e piano del tavolo, scala in mm) · Ibrido (ARCore + affinamento OpenCV). Senza ARCore si ripiega su OpenCV. |
+| Archivio delle sessioni | **Mosaico e ritagli** · Anche i fotogrammi chiave · Fotogrammi in debug (registra 3 fotogrammi al secondo con la posa) |
+| Riconoscimento dopo lo stop | **Sul telefono, AI su richiesta** · Solo sul telefono · AI automatica sulle incerte |
+
+Il codice senza dipendenze da Android (omografie, RANSAC, ORB in C#, mosaico, tracker, deduplica, motore, database, classificazione) è in `MobileApp/Recognition.Core` ed è coperto dai test di `MobileApp/Recognition.Core.Tests`, che fanno scorrere una fotocamera virtuale su un tavolo sintetico.
 
 ## Metodi di riconoscimento
 
@@ -98,7 +123,8 @@ Le versioni «con ombre» di val e test sono le stesse foto con ombre e luce non
 LiveCoinCounter/
 ├── MobileApp/
 │   ├── LiveCoinCounter/        App .NET MAUI (Android): pagine, ViewModel, servizi, asset dei modelli
-│   └── Recognition.Core/       Libreria condivisa: profili dei provider, client AI, decodifica YOLO (NMS, letterbox, avvisi)
+│   ├── Recognition.Core/       Libreria condivisa: provider AI, decodifica YOLO, mosaico (Mosaic/), sessioni e database (Sessions/)
+│   └── Recognition.Core.Tests/ Test di mosaico, tracking, deduplica, database
 ├── MachineLearning/
 │   ├── coin_ml/                Libreria Python: dataset, conversione in YOLO, foto sintetiche, ombre, metriche
 │   ├── training/               Script Kaggle, risultati degli esperimenti (RESULTS.md)
@@ -124,6 +150,7 @@ cd MobileApp/LiveCoinCounter
 dotnet build -f net10.0-android -t:Run
 
 # Test
+dotnet test MobileApp/Recognition.Core.Tests/Recognition.Core.Tests.csproj
 dotnet test MachineLearning/CoinLabeler.Tests/CoinLabeler.Tests.csproj
 cd MachineLearning && python -m unittest discover tests
 ```
@@ -210,6 +237,8 @@ Conserva il keystore e la password **fuori dal repository e in un posto sicuro**
 ## Privacy
 
 - Con i modelli **offline** la foto non lascia mai il telefono.
+- Nelle sessioni l'AI in rete (se la usi) riceve **solo i ritagli** delle monete incerte, mai i fotogrammi o il mosaico; con «Solo sul telefono» non parte nessuna richiesta.
+- Sessioni, mosaici e ritagli restano nella cartella privata dell'app; escono solo se usi «Esporta».
 - Con i metodi **AI in rete** la foto ridimensionata è inviata al provider scelto, che la tratta secondo le sue condizioni; l'app non la salva.
 - Le chiavi API sono nello storage sicuro di Android, non in chiaro.
 - La raccolta delle foto per migliorare il modello è **spenta di default**; se la attivi, le foto restano in una cartella dell'app finché non scegli tu «Esporta foto raccolte».
@@ -225,6 +254,8 @@ L'addestramento usa dataset pubblici di monete euro con box in formato YOLO:
 
 Altre fonti sono state valutate e **scartate** perché senza licenza dichiarata (dettagli in `MachineLearning/datasets/README.md`).
 
+Librerie per il riconoscimento continuo: OpenCV (Apache-2.0, da Maven `org.opencv:opencv`), Google ARCore (`com.google.ar:core`, [termini aggiuntivi ARCore](https://developers.google.com/ar/develop/terms)), AndroidX CameraX, sqlite-net. L'APK di release include solo le librerie native arm64 (telefoni a 64 bit); le build di debug anche x64, per l'emulatore.
+
 I modelli sono addestrati con [Ultralytics](https://github.com/ultralytics/ultralytics) YOLO11, rilasciato con licenza AGPL-3.0: se distribuisci l'app o i modelli, verifica che l'uso sia compatibile con quella licenza (o con una licenza commerciale Ultralytics).
 
 Questo repository non ha ancora un file di licenza per il codice: finché non ne viene aggiunto uno, tutti i diritti sono riservati.
@@ -236,6 +267,9 @@ Questo repository non ha ancora un file di licenza per il codice: finché non ne
 - [x] Addestramento su Kaggle, foto sintetiche con ombre, banchi di prova
 - [x] Più modelli offline selezionabili, estensibile
 - [x] Pipeline GitHub Actions: test, APK firmato, release
+- [x] Riconoscimento continuo con mosaico, sessioni e database (issue #6)
+- [ ] Provare i tre metodi di composizione su un tavolo vero e scegliere il predefinito (spike della issue #6)
+- [ ] Rilevatore a una classe e classificatore dedicato sul ritaglio (issue #5)
 - [ ] Provare i modelli su telefoni veri (velocità, memoria, conteggi) e scegliere il predefinito
 - [ ] Raccogliere **foto proprie** (con la raccolta facoltativa dell'app) e usarle come test riservato: è l'unico numero che dice quanto il modello vale davvero
 - [ ] Val e test più grandi, per distinguere meglio i modelli

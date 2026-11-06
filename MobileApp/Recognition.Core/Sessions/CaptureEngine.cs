@@ -1,0 +1,670 @@
+using System.Diagnostics;
+using System.Threading.Channels;
+using LiveCoinCounter.Diagnostics;
+using LiveCoinCounter.Mosaic;
+
+namespace LiveCoinCounter.Sessions;
+
+public sealed record CaptureOptions
+{
+    /// <summary>Si cercano i marker di scala ogni N fotogrammi elaborati (la ricerca costa qualche decina di millisecondi).</summary>
+    public int MarkerEveryNthFrame { get; init; } = 3;
+
+    /// <summary>Lato maggiore dell'immagine in grigio su cui si cercano i marker: più grande vede marker più piccoli o lontani.</summary>
+    public int MarkerMaxSide { get; init; } = 1280;
+
+    /// <summary>Un fotogramma diventa chiave quando la parte già coperta del mosaico scende sotto questa frazione.</summary>
+    public double KeyframeMaxCoverage { get; init; } = 0.65;
+
+    /// <summary>Nitidezza minima rispetto alla mediana recente: i fotogrammi mossi non entrano nel mosaico.</summary>
+    public double MinRelativeSharpness { get; init; } = 0.55;
+    /// <summary>
+    /// Nitidezza minima di ogni fotogramma chiave. I valori sono tarati sulle prove sul campo (10 sessioni): i fotogrammi a
+    /// fuoco misurano 160–240, quelli sfocati 13–39.
+    /// </summary>
+    public double MinAbsoluteSharpness { get; init; } = 30;
+
+    /// <summary>Nitidezza minima del primo fotogramma chiave: è la base di tutto il mosaico, non può essere sfocato.</summary>
+    public double FirstKeyframeMinSharpness { get; init; } = 60;
+
+    /// <summary>Nitidezza a cui un fotogramma pesa al massimo nel mosaico (assoluta: un fotogramma più nitido sostituisce uno sfocato).</summary>
+    public double SharpnessReference { get; init; } = 150;
+
+    /// <summary>
+    /// Inlier minimi per comporre un fotogramma chiave nel mosaico (solo tracker a punti caratteristici; non vale per il primo).
+    /// Un aggancio debole (nella prova sul campo: 26 inlier) mette nel mosaico un fotogramma storto e si vede la cucitura;
+    /// i fotogrammi di aggancio del tracker intanto tengono il tracking, e il fotogramma buono arriva poco dopo.
+    /// </summary>
+    public int MinKeyframeInliers { get; init; } = 60;
+
+    /// <summary>Sotto questa nitidezza mediana (ultimi fotogrammi) si suggerisce di allontanarsi / rimettere a fuoco.</summary>
+    public double BlurryBelow { get; init; } = 45;
+
+    /// <summary>Sotto questa luminosità media (0–255) si suggerisce la torcia.</summary>
+    public double DarkBelow { get; init; } = 55;
+
+    /// <summary>Lato del ritaglio salvato per ogni moneta.</summary>
+    public int CropSize { get; init; } = 256;
+
+    /// <summary>Lato massimo di una foto importata quando diventa il mosaico.</summary>
+    public int StillMosaicMaxSide { get; init; } = 2048;
+}
+
+/// <summary>
+/// Stato del tracking per l'interfaccia. <paramref name="LastKnownQuad"/> è l'ultima zona in cui il fotogramma è stato
+/// collocato: quando il tracking è perso indica all'operatore dove tornare.
+/// </summary>
+public sealed record TrackingUpdate(TrackStatus Status, string? Hint, Quad? FrameQuad, int Keyframes, int PendingDetections, bool MosaicFull,
+    Quad? LastKnownQuad = null, bool Blurry = false, bool Dark = false, RecoveryGuidance? Recovery = null, Quad? EstimatedQuad = null,
+    bool Featureless = false);
+
+/// <summary>
+/// Come muovere il telefono per tornare dove il tracking era agganciato, quando si è perso.
+/// </summary>
+/// <param name="ScreenX">Direzione verso cui spostare il telefono, nei versi dello schermo (X a destra, Y in basso, lunghezza 1).</param>
+/// <param name="DistancePx">Distanza stimata nel mosaico, in pixel del mosaico.</param>
+/// <param name="FrameSidePx">Lato minore dell'inquadratura nel mosaico: serve a esprimere la distanza in "inquadrature".</param>
+/// <param name="Tracked">La stima segue davvero il movimento (altrimenti è solo mantenuta e meno affidabile).</param>
+public sealed record RecoveryGuidance(double ScreenX, double ScreenY, double DistancePx, double FrameSidePx, bool Tracked)
+{
+    /// <summary>Angolo della freccia in gradi, in senso orario a partire da "in alto" (0 = su, 90 = destra, 180 = giù, 270 = sinistra).</summary>
+    public double ArrowDegrees => (Math.Atan2(ScreenX, -ScreenY) * 180 / Math.PI + 360) % 360;
+
+    /// <summary>La distanza in inquadrature (1 = quanto è larga l'inquadratura).</summary>
+    public double DistanceInFrames => FrameSidePx <= 0 ? 0 : DistancePx / FrameSidePx;
+
+    /// <summary>"a destra", "in alto a sinistra", "indietro"... in base all'angolo.</summary>
+    public string DirectionWords => ArrowDegrees switch
+    {
+        < 22.5 or >= 337.5 => "in alto",
+        < 67.5 => "in alto a destra",
+        < 112.5 => "a destra",
+        < 157.5 => "in basso a destra",
+        < 202.5 => "in basso",
+        < 247.5 => "in basso a sinistra",
+        < 292.5 => "a sinistra",
+        _ => "in alto a sinistra"
+    };
+
+    /// <summary>
+    /// Dal vettore di ritorno nel mosaico (<paramref name="toLastReliable"/>) alla guida sullo schermo: il mosaico ha gli assi
+    /// dell'inizio, quindi si ruota il vettore dell'angolo di cui il telefono è girato rispetto ad allora.
+    /// </summary>
+    public static RecoveryGuidance? From(PoseEstimate estimate, int frameWidth, int frameHeight)
+    {
+        var quad = estimate.FrameToMosaic.MapRect(frameWidth, frameHeight);
+        var vx = estimate.ToLastReliable.X;
+        var vy = estimate.ToLastReliable.Y;
+        var distance = Math.Sqrt(vx * vx + vy * vy);
+        if (distance < 1e-6) return null;
+
+        // all'inizio il lato A→B dell'inquadratura punta a 90° nel mosaico; la differenza è la rotazione del telefono
+        var angle = Math.Atan2(quad.B.Y - quad.A.Y, quad.B.X - quad.A.X) - Math.PI / 2;
+        double cos = Math.Cos(-angle), sin = Math.Sin(-angle);
+        var sx = (vx * cos - vy * sin) / distance;
+        var sy = (vx * sin + vy * cos) / distance;
+        var side = Math.Min(quad.A.DistanceTo(quad.B), quad.A.DistanceTo(quad.D));
+        return new RecoveryGuidance(sx, sy, distance, side, estimate.Tracked);
+    }
+}
+
+/// <summary>Una moneta da salvare: <see cref="Crop"/> è valorizzato quando c'è un ritaglio nuovo o migliore.</summary>
+public sealed record CoinChange(CoinTrack Track, bool IsNew, ArgbImage? Crop, CoinColor? Color = null);
+
+/// <summary>Dove finiscono i risultati dell'acquisizione: database e file (lo implementa l'app).</summary>
+public interface ICaptureSink
+{
+    Task OnKeyframeAsync(int index, ArgbImage image, Homography frameToMosaic, double sharpness);
+    Task OnCoinsAsync(IReadOnlyList<CoinChange> changes);
+
+    /// <summary>Ogni fotogramma elaborato, per la registrazione in modalità debug. Deve tornare subito.</summary>
+    void OnFrame(CameraFrame frame, TrackResult result) { }
+}
+
+/// <summary>
+/// Il motore di una sessione live, con due thread separati:
+/// 1) tracking: colloca i fotogrammi, sceglie i fotogrammi chiave, compone il mosaico;
+/// 2) rilevamento: su ogni fotogramma chiave trova le monete (solo localizzazione), le deduplica nel mosaico e salva i ritagli.
+/// Il riconoscimento del valore avviene dopo lo stop (<see cref="SessionClassifier"/>).
+/// </summary>
+public sealed class CaptureEngine
+{
+    private sealed record PendingKeyframe(int Index, ArgbImage Image, Homography FrameToMosaic, float Quality);
+
+    private readonly IMosaicTracker _tracker;
+
+    // le monete di ogni fotogramma chiave già analizzato (riquadro nel fotogramma e moneta), per riconoscerle confrontando le immagini
+    private readonly Dictionary<int, (int Width, int Height, List<(RectF Box, CoinTrack Track)> Coins)> _keyframeCoins = new();
+
+    /// <summary>Con quanti fotogrammi chiave precedenti (i più recenti) si confronta direttamente un fotogramma chiave nuovo.</summary>
+    private const int MaxRelatedKeyframes = 10;
+    private readonly ICoinLocator _locator;
+    private readonly ICaptureSink _sink;
+    private readonly CaptureOptions _options;
+    private readonly Channel<CameraFrame> _frames = Channel.CreateBounded<CameraFrame>(
+        new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+    private readonly Channel<PendingKeyframe> _keyframes = Channel.CreateUnbounded<PendingKeyframe>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly CoverageGrid _coverage = new();
+    private readonly Queue<double> _recentSharpness = new();
+    private Task? _trackingTask;
+    private Task? _detectionTask;
+    private int _keyframeCount;
+    private int _pending;
+    private Quad? _lastKnownQuad;
+    private volatile bool _busy;
+    private readonly IDiagLog _log;
+    private readonly IMarkerDetector? _markerDetector;
+    private int _markerFrames;
+
+    // contatori per il registro diagnostico (statistiche ogni 2 secondi)
+    private readonly Stopwatch _statsClock = Stopwatch.StartNew();
+    private long _pushed, _skipped, _processed, _trackTicks, _detectTicks, _detections;
+    private long _statsPushed, _statsSkipped, _statsProcessed, _statsTrackTicks, _statsDetectTicks, _statsDetections;
+    private long _lastStatsMs;
+    private int _framesSeen;
+    private int _poorFrames;
+    private int _pendingShots;
+    private volatile bool _paused;
+
+    /// <summary>
+    /// In pausa i fotogrammi arrivano (l'anteprima si aggiorna) ma non si elaborano: niente mosaico né monete. Serve allo scatto,
+    /// mentre si inquadra.
+    /// </summary>
+    public bool Paused
+    {
+        get => _paused;
+        set => _paused = value;
+    }
+    private long _lastShotNs = long.MinValue;
+
+    /// <summary>Tempo minimo tra due scatti dello scatto singolo: fotogrammi un po' diversi (luce, fuoco, rumore) danno ritagli diversi.</summary>
+    public const long ShotSpacingNs = 300_000_000;
+
+    /// <summary>
+    /// Scatto singolo: i prossimi <paramref name="count"/> fotogrammi nitidi e collocati diventano fotogrammi chiave anche se l'area è
+    /// già coperta. Le stesse monete viste in più scatti si riconoscono come una sola e tengono il ritaglio migliore.
+    /// </summary>
+    public void RequestShots(int count) => Interlocked.Exchange(ref _pendingShots, Math.Max(0, count));
+
+    /// <summary>Scatti richiesti e non ancora fatti.</summary>
+    public int PendingShots => Volatile.Read(ref _pendingShots);
+    private double _brightnessAverage;
+
+    public CaptureEngine(IMosaicTracker tracker, ICoinLocator locator, ICaptureSink sink, MosaicCanvas canvas, CaptureOptions? options = null,
+        IDiagLog? log = null, IMarkerDetector? markerDetector = null)
+    {
+        _markerDetector = markerDetector;
+        _tracker = tracker;
+        _locator = locator;
+        _sink = sink;
+        Canvas = canvas;
+        _options = options ?? new CaptureOptions();
+        _log = log ?? NullDiagLog.Instance;
+    }
+
+    public MosaicCanvas Canvas { get; }
+    public CoinRegistry Coins { get; } = new();
+
+    /// <summary>
+    /// Diametro mediano (pixel del fotogramma) delle monete dell'ultimo fotogramma chiave analizzato, 0 se non ce n'erano.
+    /// Nelle prove sotto gli 80 px circa gli 1 cent venivano letti come 2 cent: serve a chiedere di avvicinarsi.
+    /// </summary>
+    public float LastCoinDiameterPx { get; private set; }
+
+    /// <summary>Sotto questo diametro (pixel del fotogramma) le monete sono troppo piccole per riconoscere bene il taglio.</summary>
+    public const float SmallCoinDiameterPx = 75;
+
+    /// <summary>I marker di scala visti finora, sul mosaico (vuoto se non c'è un rilevatore di marker).</summary>
+    public MarkerRegistry Markers { get; } = new();
+    public int KeyframeCount => _keyframeCount;
+
+    /// <summary>Scala del mosaico in pixel/mm, quando il tracker la conosce (ARCore).</summary>
+    public double? PxPerMm { get; private set; }
+
+    /// <summary>Vero se il thread di tracking è libero: chi produce i fotogrammi può saltare la conversione quando è occupato.</summary>
+    public bool WantsFrame
+    {
+        get
+        {
+            var wants = !_busy && _frames.Reader.Count == 0;
+            if (!wants) Interlocked.Increment(ref _skipped);
+            return wants;
+        }
+    }
+
+    public event Action<TrackingUpdate>? TrackingUpdated;
+    public event Action<IReadOnlyList<TileKey>>? MosaicChanged;
+    public event Action<IReadOnlyList<CoinTrack>>? CoinsChanged;
+    public event Action<Exception>? Error;
+
+    public void Start()
+    {
+        _log.Event("engine_start", new { tracker = _tracker.Id, locator = _locator.Id, options = _options }, important: true);
+        _trackingTask ??= Task.Run(TrackingLoopAsync);
+        _detectionTask ??= Task.Run(DetectionLoopAsync);
+    }
+
+    /// <summary>Consegna un fotogramma; se il tracking è indietro il fotogramma precedente in attesa viene scartato.</summary>
+    public bool PushFrame(CameraFrame frame)
+    {
+        Interlocked.Increment(ref _pushed);
+        return _frames.Writer.TryWrite(frame);
+    }
+
+    /// <summary>Una foto importata: diventa da sola il mosaico (un solo fotogramma chiave).</summary>
+    public async Task AddStillAsync(ArgbImage image)
+    {
+        var scale = Math.Min(1.0, _options.StillMosaicMaxSide / (double)Math.Max(image.Width, image.Height));
+        var h = Homography.Scale(scale);
+        await AddKeyframeAsync(image, h, quality: 1, sharpness: 0);
+        TrackingUpdated?.Invoke(new TrackingUpdate(TrackStatus.Tracking, null, h.MapRect(image.Width, image.Height), _keyframeCount, _pending, Canvas.IsFull));
+    }
+
+    /// <summary>Ferma l'acquisizione e aspetta che il rilevamento abbia elaborato tutti i fotogrammi chiave rimasti.</summary>
+    public async Task StopAsync()
+    {
+        _frames.Writer.TryComplete();
+        if (_trackingTask is not null) await _trackingTask;
+        _keyframes.Writer.TryComplete();
+        if (_detectionTask is not null) await _detectionTask;
+        _log.Event("engine_stop", new
+        {
+            pushed = _pushed, skipped = _skipped, processed = _processed, keyframes = _keyframeCount, coins = Coins.Count,
+            tiles = Canvas.TileCount, bounds = DiagData.Box(Canvas.Bounds), full = Canvas.IsFull
+        }, important: true);
+    }
+
+    private async Task TrackingLoopAsync()
+    {
+        await foreach (var frame in _frames.Reader.ReadAllAsync())
+        {
+            if (_paused) continue;
+            _busy = true;
+            try
+            {
+                await ProcessFrameAsync(frame);
+            }
+            catch (Exception ex)
+            {
+                _log.Event("error", new { where = "tracking", message = ex.Message, stack = ex.ToString() }, important: true);
+                Error?.Invoke(ex);
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Cerca i marker di scala nel fotogramma (uno ogni <see cref="CaptureOptions.MarkerEveryNthFrame"/>) e li registra sul mosaico con
+    /// l'omografia del fotogramma. Un errore del rilevatore non ferma l'acquisizione: si registra e si prosegue senza marker.
+    /// </summary>
+    private void DetectMarkers(CameraFrame frame, TrackResult result)
+    {
+        if (_markerDetector is null || result.FrameToMosaic is not { } h) return;
+        if (_markerFrames++ % Math.Max(1, _options.MarkerEveryNthFrame) != 0) return;
+        try
+        {
+            var timer = Stopwatch.StartNew();
+            var gray = ImageOps.ToGray(frame.Image, _options.MarkerMaxSide, out var scale);
+            var found = _markerDetector.Detect(gray);
+            if (found.Count == 0) return;
+
+            var seen = new List<object>();
+            var accepted = Markers.ObserveFrame(found, h, 1.0 / scale);
+            for (var i = 0; i < found.Count; i++)
+            {
+                MarkerRegistry.TryMeasure(found[i].Corners, h, 1.0 / scale, out var centre, out var pxPerMm);
+                seen.Add(new { id = found[i].Id, pxPerMm = DiagData.R(pxPerMm, 3), x = DiagData.R(centre.X, 0), y = DiagData.R(centre.Y, 0), accepted = accepted[i] });
+            }
+            _log.Event("markers", new { frame = _framesSeen, ms = DiagData.R(timer.Elapsed.TotalMilliseconds), seen, total = Markers.Count });
+        }
+        catch (Exception ex)
+        {
+            _log.Event("error", new { where = "markers", message = ex.Message }, important: true);
+        }
+    }
+
+    private async Task ProcessFrameAsync(CameraFrame frame)
+    {
+        var timer = Stopwatch.StartNew();
+        var result = _tracker.Process(frame);
+        var trackMs = timer.Elapsed.TotalMilliseconds;
+        Interlocked.Add(ref _trackTicks, timer.ElapsedTicks);
+        Interlocked.Increment(ref _processed);
+        _sink.OnFrame(frame, result);
+        if (result.PxPerMm is { } pxPerMm) PxPerMm = pxPerMm;
+        DetectMarkers(frame, result);
+
+        var hint = result.Hint;
+        Quad? quad = null;
+        var decision = result.FrameToMosaic is null ? "not_placed" : "no_new_area";
+        double? coverage = null;
+
+        // nitidezza e luce di tutti i fotogrammi, anche quelli non collocati: servono ai suggerimenti all'operatore
+        var median = MedianSharpness(result.Sharpness);
+        var brightness = ImageOps.MeanBrightness(frame.Image);
+        _brightnessAverage = _framesSeen == 0 ? brightness : _brightnessAverage * 0.85 + brightness * 0.15;
+        var warmedUp = _framesSeen >= 8;
+        var dark = warmedUp && _brightnessAverage < _options.DarkBelow;
+        var blurry = warmedUp && median > 0 && median < _options.BlurryBelow;
+
+        if (result.FrameToMosaic is { } h)
+        {
+            quad = h.MapRect(frame.Image.Width, frame.Image.Height);
+            _lastKnownQuad = quad;
+            var sharpEnough = result.Sharpness >= _options.MinAbsoluteSharpness &&
+                              (median <= 0 || result.Sharpness >= median * _options.MinRelativeSharpness);
+            coverage = _coverage.CoveredFraction(quad.Value);
+            // scatto singolo: il fotogramma diventa chiave anche su un'area già coperta (uno ogni ShotSpacingNs)
+            var shot = Volatile.Read(ref _pendingShots) > 0 && (_lastShotNs == long.MinValue || frame.TimestampNs - _lastShotNs >= ShotSpacingNs);
+            var newArea = coverage < _options.KeyframeMaxCoverage || shot;
+
+            // il primo fotogramma chiave fissa orientamento e scala di tutto il mosaico: deve essere nitido
+            var firstBlurry = false;
+            if (_keyframeCount == 0 && result.Sharpness < _options.FirstKeyframeMinSharpness)
+            {
+                sharpEnough = false;
+                firstBlurry = true;
+                hint ??= "Immagine sfocata o troppo scura: tieni fermo il telefono su una zona con le monete, aggiungi luce";
+            }
+
+            var weakAlignment = _keyframeCount > 0 && result.Detail?.Source.StartsWith("features", StringComparison.Ordinal) == true &&
+                                result.Inliers < _options.MinKeyframeInliers;
+
+            if (newArea && sharpEnough && weakAlignment)
+            {
+                decision = "weak_alignment";
+            }
+            else if (newArea && sharpEnough && !Canvas.IsFull)
+            {
+                decision = shot ? "shot" : "keyframe";
+                if (shot)
+                {
+                    Interlocked.Decrement(ref _pendingShots);
+                    _lastShotNs = frame.TimestampNs;
+                }
+                _tracker.CommitKeyframe(h);
+                _coverage.Mark(quad.Value);
+                // peso assoluto: un fotogramma nitido sostituisce nel mosaico uno sfocato anche se tutti i precedenti erano sfocati
+                var quality = (float)Math.Clamp(result.Sharpness / _options.SharpnessReference, 0.2, 1);
+                await AddKeyframeAsync(frame.Image, h, quality, result.Sharpness);
+            }
+            else if (newArea && !sharpEnough)
+            {
+                decision = firstBlurry ? "first_blurry" : "blurry";
+                hint ??= "Più lentamente: l'immagine è mossa";
+            }
+            else if (newArea && Canvas.IsFull)
+            {
+                decision = "mosaic_full";
+            }
+        }
+
+        // la causa più probabile prima: con poca luce l'otturatore resta aperto più a lungo e l'immagine si sfoca
+        if (dark && result.Status != TrackStatus.Lost) hint = "Poca luce: accendi la torcia 🔦 per immagini più nitide";
+        else if (hint is null && blurry) hint = "Immagine sfocata: allontana il telefono (25–40 cm) e tienilo fermo";
+
+        if (Canvas.IsFull) hint = "Superficie massima raggiunta: ferma l'acquisizione";
+        // pochi punti riconoscibili per più fotogrammi di fila: il telefono guarda un tavolo vuoto (nessun aggancio possibile qui)
+        _poorFrames = result.Detail is { Features: < 150 } ? _poorFrames + 1 : 0;
+        var featureless = result.Status == TrackStatus.Lost && _poorFrames >= 3;
+        if (featureless) { blurry = false; if (hint is not null && hint.StartsWith("Immagine sfocata", StringComparison.Ordinal)) hint = null; }
+        var recovery = result.Estimate is { } estimate ? RecoveryGuidance.From(estimate, frame.Image.Width, frame.Image.Height) : null;
+        var estimatedQuad = result.Estimate?.FrameToMosaic.MapRect(frame.Image.Width, frame.Image.Height);
+        TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad, blurry, dark,
+            recovery, estimatedQuad, featureless));
+
+        if (_log.Enabled)
+        {
+            _log.Event("frame", new
+            {
+                n = _framesSeen,
+                ts = frame.TimestampNs / 1_000_000,
+                w = frame.Image.Width, h = frame.Image.Height, rot = frame.RotationDegrees,
+                status = result.Status.ToString(),
+                decision,
+                sharp = DiagData.R(result.Sharpness), median = DiagData.R(median), light = DiagData.R(brightness, 0),
+                cover = coverage is { } c ? DiagData.R(c, 2) : (double?)null,
+                inliers = result.Inliers,
+                ms = DiagData.R(trackMs),
+                quad = quad is { } q ? DiagData.Quad(q) : null,
+                hint,
+                pose = frame.Pose is null ? null : new { tracking = frame.Pose.CameraTracking, plane = frame.Pose.Plane is not null },
+                recovery = recovery is null ? null : new
+                {
+                    dir = DiagData.R(recovery.ArrowDegrees, 0), px = DiagData.R(recovery.DistancePx, 0),
+                    frames = DiagData.R(recovery.DistanceInFrames, 2), tracked = recovery.Tracked
+                },
+                detail = result.Detail
+            });
+            LogStatsIfDue();
+        }
+        _framesSeen++;
+    }
+
+    private void LogStatsIfDue()
+    {
+        var now = _statsClock.ElapsedMilliseconds;
+        if (now - _lastStatsMs < 2000) return;
+        var seconds = Math.Max(0.001, (now - _lastStatsMs) / 1000.0);
+        _lastStatsMs = now;
+
+        long Delta(ref long current, ref long previous)
+        {
+            var value = Interlocked.Read(ref current);
+            var d = value - previous;
+            previous = value;
+            return d;
+        }
+
+        var pushed = Delta(ref _pushed, ref _statsPushed);
+        var skipped = Delta(ref _skipped, ref _statsSkipped);
+        var processed = Delta(ref _processed, ref _statsProcessed);
+        var trackTicks = Delta(ref _trackTicks, ref _statsTrackTicks);
+        var detectTicks = Delta(ref _detectTicks, ref _statsDetectTicks);
+        var detections = Delta(ref _detections, ref _statsDetections);
+        _log.Event("stats", new
+        {
+            fpsIn = DiagData.R(pushed / seconds), fpsProcessed = DiagData.R(processed / seconds), skippedBusy = skipped,
+            avgTrackMs = processed == 0 ? 0 : DiagData.R(trackTicks * 1000.0 / Stopwatch.Frequency / processed),
+            avgDetectMs = detections == 0 ? 0 : DiagData.R(detectTicks * 1000.0 / Stopwatch.Frequency / detections),
+            pending = _pending, keyframes = _keyframeCount, coins = Coins.Count, tiles = Canvas.TileCount,
+            managedMb = DiagData.R(GC.GetTotalMemory(false) / 1048576.0), gc2 = GC.CollectionCount(2)
+        });
+    }
+
+    private async Task AddKeyframeAsync(ArgbImage image, Homography h, float quality, double sharpness)
+    {
+        var index = _keyframeCount++;
+        var changed = Canvas.Compose(image, h, quality);
+        _log.Event("keyframe", new
+        {
+            index, h = DiagData.Homography(h), quad = DiagData.Quad(h.MapRect(image.Width, image.Height)),
+            sharp = DiagData.R(sharpness), quality = DiagData.R(quality, 2), changedTiles = changed.Count, tiles = Canvas.TileCount,
+            bounds = DiagData.Box(Canvas.Bounds), full = Canvas.IsFull
+        });
+        if (changed.Count > 0) MosaicChanged?.Invoke(changed);
+        Interlocked.Increment(ref _pending);
+        await _keyframes.Writer.WriteAsync(new PendingKeyframe(index, image, h, quality));
+        try
+        {
+            await _sink.OnKeyframeAsync(index, image, h, sharpness);
+        }
+        catch (Exception ex)
+        {
+            _log.Event("error", new { where = "keyframe_sink", message = ex.Message, stack = ex.ToString() }, important: true);
+            Error?.Invoke(ex);
+        }
+    }
+
+    private double MedianSharpness(double value)
+    {
+        _recentSharpness.Enqueue(value);
+        while (_recentSharpness.Count > 30) _recentSharpness.Dequeue();
+        var sorted = _recentSharpness.OrderBy(v => v).ToList();
+        return sorted.Count < 5 ? 0 : sorted[sorted.Count / 2];
+    }
+
+    private async Task DetectionLoopAsync()
+    {
+        await foreach (var keyframe in _keyframes.Reader.ReadAllAsync())
+        {
+            try
+            {
+                await DetectAsync(keyframe);
+            }
+            catch (Exception ex)
+            {
+                _log.Event("error", new { where = "detection", keyframe = keyframe.Index, message = ex.Message, stack = ex.ToString() }, important: true);
+                Error?.Invoke(ex);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _pending);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Le monete del fotogramma chiave nuovo già viste in un fotogramma chiave precedente: il centro di ogni moneta, riportato con
+    /// l'omografia diretta tra le due immagini, deve cadere entro mezzo diametro da una moneta di quel fotogramma. Si parte dai
+    /// fotogrammi chiave più recenti; ogni moneta nota si usa una volta sola.
+    /// </summary>
+    private (Dictionary<int, CoinTrack> Known, List<object> Related) IdentifyByKeyframes(int index, IReadOnlyList<CoinObservation> observations)
+    {
+        var known = new Dictionary<int, CoinTrack>();
+        var related = new List<object>();
+        if (_tracker is not IKeyframeRelator relator || observations.Count == 0) return (known, related);
+
+        foreach (var (other, (width, height, coins)) in _keyframeCoins.Where(kv => kv.Key < index).OrderByDescending(kv => kv.Key).Take(MaxRelatedKeyframes).ToList())
+        {
+            if (known.Count == observations.Count) break;
+            if (relator.Relate(index, other) is not { } relation) continue;
+            var used = known.Values.ToHashSet();
+            var pairs = new List<(int Obs, int Coin, double Distance)>();
+            var inside = 0;
+            var candidates = new HashSet<int>();
+            for (var i = 0; i < observations.Count; i++)
+            {
+                if (known.ContainsKey(i)) continue;
+                var box = observations[i].FrameBox;
+                var (x, y) = relation.FromToTo.Apply(box.CenterX, box.CenterY);
+                // grandezza della moneta riportata nell'altra immagine (scala locale dell'omografia)
+                var (ex, ey) = relation.FromToTo.Apply(box.CenterX + box.Diameter / 2, box.CenterY);
+                var mapped = 2 * Math.Sqrt((ex - x) * (ex - x) + (ey - y) * (ey - y));
+                if (x > 0 && y > 0 && x < width && y < height) inside++;
+                for (var j = 0; j < coins.Count; j++)
+                {
+                    if (used.Contains(coins[j].Track)) continue;
+                    var c = coins[j].Box;
+                    var d = Math.Sqrt((x - c.CenterX) * (x - c.CenterX) + (y - c.CenterY) * (y - c.CenterY));
+                    if (d < DetectionFilter.SameCoinDistance * c.Diameter && Math.Abs(mapped / c.Diameter - 1) < 0.3)
+                    {
+                        pairs.Add((i, j, d));
+                        candidates.Add(i);
+                    }
+                }
+            }
+            // relazione sbagliata (punti in comune per caso): le monete riportate cadono a caso e poche trovano la loro corrispondente
+            if (inside >= 2 && candidates.Count < 0.6 * inside)
+            {
+                related.Add(new { keyframe = other, inliers = relation.Inliers, matched = 0, rejected = true, inside, candidates = candidates.Count });
+                continue;
+            }
+            var matched = 0;
+            foreach (var p in pairs.OrderBy(p => p.Distance))
+            {
+                if (known.ContainsKey(p.Obs) || used.Contains(coins[p.Coin].Track)) continue;
+                known[p.Obs] = coins[p.Coin].Track;
+                used.Add(coins[p.Coin].Track);
+                matched++;
+            }
+            related.Add(new { keyframe = other, inliers = relation.Inliers, matched });
+        }
+        return (known, related);
+    }
+
+    private async Task DetectAsync(PendingKeyframe keyframe)
+    {
+        var timer = Stopwatch.StartNew();
+        var image = keyframe.Image;
+        var boxes = await _locator.LocateAsync(image);
+        var locateMs = timer.Elapsed.TotalMilliseconds;
+        var changes = new List<CoinChange>();
+        var logged = _log.Enabled ? new List<object>() : null;
+
+        // prima i riquadri utilizzabili, poi l'abbinamento alle monete note, per tutto il fotogramma insieme
+        var usable = new List<(CoinBox Coin, RectF MosaicBox, float Quality)>();
+        var inFrame = new List<CoinBox>();
+        foreach (var coin in boxes)
+        {
+            if (!DetectionFilter.IsUsable(coin.Box, image.Width, image.Height))
+            {
+                logged?.Add(new { box = DiagData.Box(coin.Box), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents, use = DetectionFilter.Reason(coin.Box, image.Width, image.Height) });
+                continue;
+            }
+            inFrame.Add(coin);
+        }
+
+        // due riquadri sulla stessa moneta: si tiene il più sicuro (altrimenti diventerebbero due monete)
+        var keep = DetectionFilter.SuppressSameCoin(inFrame.Select(c => c.Box).ToList(), inFrame.Select(c => c.Confidence).ToList());
+        for (var i = 0; i < inFrame.Count; i++)
+        {
+            var coin = inFrame[i];
+            if (!keep.Contains(i))
+            {
+                logged?.Add(new { box = DiagData.Box(coin.Box), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents, use = "same_coin" });
+                continue;
+            }
+            // la vista migliore di una moneta è anche la più ravvicinata: il ritaglio di una moneta piccola è povero di dettagli
+            var size = Math.Clamp(coin.Box.Diameter / 100f, 0.3f, 1f);
+            usable.Add((coin, keyframe.FrameToMosaic.MapBox(coin.Box),
+                DetectionFilter.Centrality(coin.Box, image.Width, image.Height) * keyframe.Quality * size));
+        }
+        if (usable.Count > 0)
+        {
+            var diameters = usable.Select(u => u.Coin.Box.Diameter).OrderBy(d => d).ToList();
+            LastCoinDiameterPx = diameters[diameters.Count / 2];
+        }
+        var observations = usable.Select(u => new CoinObservation(u.Coin.Box, u.MosaicBox, u.Coin.Confidence, u.Quality,
+            keyframe.Index, u.Coin.Cents, u.Coin.ClassConfidence)).ToList();
+        // solo per il registro: monete molto più grandi o piccole delle stesse già note = fotogramma collocato con la scala sbagliata
+        var scaleRatio = Coins.KeyframeScaleRatio(observations);
+        // prima le monete già viste: confronto diretto con le immagini dei fotogrammi chiave precedenti, che non risente della deriva
+        // del mosaico; poi le altre con la posizione nel mosaico
+        var (known, related) = IdentifyByKeyframes(keyframe.Index, observations);
+        var updates = Coins.ObserveKeyframe(observations, known);
+        _keyframeCoins[keyframe.Index] = (image.Width, image.Height, observations.Select((o, i) => (o.FrameBox, updates[i].Track)).ToList());
+
+        for (var k = 0; k < usable.Count; k++)
+        {
+            var (coin, mosaicBox, quality) = usable[k];
+            var update = updates[k];
+            var crop = update.IsBetter ? ImageOps.CropSquare(image, coin.Box, _options.CropSize) : null;
+            var color = crop is not null ? CoinColorAnalysis.Analyze(crop) : null;
+            changes.Add(new CoinChange(update.Track, update.IsNew, crop, color));
+            logged?.Add(new
+            {
+                color = color is null ? null : new { color.CoreHue, color.CoreSat, color.CoreVal, color.RingHue, color.RingSat, color.RingVal, guess = color.Guess },
+                box = DiagData.Box(coin.Box), mosaic = DiagData.Box(mosaicBox), conf = DiagData.R(coin.Confidence, 2), cents = coin.Cents,
+                classConf = DiagData.R(coin.ClassConfidence, 2), use = "ok", track = update.Track.Id, isNew = update.IsNew,
+                observations = update.Track.Observations, better = update.IsBetter, quality = DiagData.R(quality, 2)
+            });
+        }
+
+        Interlocked.Add(ref _detectTicks, timer.ElapsedTicks);
+        Interlocked.Increment(ref _detections);
+        _log.Event("detect", new
+        {
+            keyframe = keyframe.Index, locateMs = DiagData.R(locateMs), totalMs = DiagData.R(timer.Elapsed.TotalMilliseconds),
+            raw = boxes.Count, accepted = changes.Count, tracks = Coins.Count, coinDiameterPx = DiagData.R(LastCoinDiameterPx, 0),
+            scaleRatio = scaleRatio is { } r ? DiagData.R(r, 2) : (double?)null, identified = known.Count, related, boxes = logged
+        });
+
+        if (changes.Count == 0) return;
+        await _sink.OnCoinsAsync(changes);
+        CoinsChanged?.Invoke(Coins.Tracks);
+    }
+}

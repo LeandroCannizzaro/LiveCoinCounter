@@ -1,0 +1,7 @@
+<metadata>
+  <!-- Binding di ARCore (com.google.ar:core da Maven): metodi che il generatore non sa tradurre. -->
+  <!-- getAnchors compare due volte (metodo "ponte" sintetico del compilatore Java + quello vero) -->
+  <remove-node path="/api/package[@name='com.google.ar.core']/class/method[@name='getAnchors' and @synthetic='true']" />
+  <!-- finalize() non si può ridefinire in C# -->
+  <remove-node path="/api/package[@name='com.google.ar.core']/class/method[@name='finalize']" />
+</metadata>

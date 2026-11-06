@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LiveCoinCounter.ViewModels"
+             xmlns:controls="clr-namespace:LiveCoinCounter.Controls"
+             x:Class="LiveCoinCounter.Views.CapturePage"
+             x:DataType="vm:CaptureViewModel"
+             Title="Conta"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="#121214">
+
+    <Grid>
+        <!-- Il mosaico della superficie acquisita, a tutto schermo -->
+        <controls:MosaicView x:Name="Mosaic" />
+
+        <!-- In alto: numero di monete trovate e suggerimenti -->
+        <VerticalStackLayout VerticalOptions="Start" Padding="16,16,16,0" Spacing="8" InputTransparent="True">
+            <Border IsVisible="{Binding ShowCounter}" HorizontalOptions="Start"
+                    Padding="14,6" StrokeThickness="0" StrokeShape="RoundRectangle 18" BackgroundColor="#99000000">
+                <Label Text="{Binding CoinCountText}" TextColor="White" FontSize="16" FontAttributes="Bold" />
+            </Border>
+            <Border IsVisible="{Binding HasHint}" HorizontalOptions="Start"
+                    Padding="12,6" StrokeThickness="0" StrokeShape="RoundRectangle 14" BackgroundColor="#CCFF9800">
+                <Label Text="{Binding Hint}" TextColor="Black" FontSize="13" />
+            </Border>
+        </VerticalStackLayout>
+
+        <!-- Schermata iniziale: suggerimenti -->
+        <Border IsVisible="{Binding IsIdle}" VerticalOptions="Center" Margin="24" Padding="18"
+                StrokeThickness="0" StrokeShape="RoundRectangle 16" BackgroundColor="#E61E1E22">
+            <VerticalStackLayout Spacing="10">
+                <Label Text="🪙 Riconoscimento continuo" TextColor="White" FontSize="18" FontAttributes="Bold" />
+                <Label TextColor="#DDDDDD" FontSize="14" LineBreakMode="WordWrap">
+                    <Label.FormattedText>
+                        <FormattedString>
+                            <Span Text="• Tocca ▶ e tieni il telefono parallelo al tavolo, a 25–40 cm&#10;" />
+                            <Span Text="• Muovilo lentamente: il mosaico del tavolo cresce sullo schermo&#10;" />
+                            <Span Text="• Non spostare le monete durante l'acquisizione&#10;" />
+                            <Span Text="• Tocca ■ quando hai coperto tutto: poi l'app riconosce il valore" />
+                        </FormattedString>
+                    </Label.FormattedText>
+                </Label>
+                <Label Text="{Binding StatusText}" TextColor="#AAAAAA" FontSize="12" />
+            </VerticalStackLayout>
+        </Border>
+
+        <!-- Stato durante l'acquisizione -->
+        <Label IsVisible="{Binding IsCapturing}" Text="{Binding StatusText}"
+               VerticalOptions="End" HorizontalOptions="Center" Margin="24,0,24,112"
+               TextColor="#DDFFFFFF" FontSize="13" HorizontalTextAlignment="Center" InputTransparent="True" />
+
+        <!-- Pulsante trasparente start / stop -->
+        <Button Text="{Binding ToggleSymbol}"
+                Command="{Binding ToggleCommand}"
+                IsVisible="{Binding ShowToggle}"
+                VerticalOptions="End" HorizontalOptions="Center" Margin="0,0,0,28"
+                WidthRequest="72" HeightRequest="72" CornerRadius="36" Padding="0"
+                FontSize="28" TextColor="White"
+                BackgroundColor="#55000000" BorderColor="#CCFFFFFF" BorderWidth="2"
+                SemanticProperties.Description="Avvia o ferma l'acquisizione" />
+
+        <!-- Scatto singolo, a fianco di ▶ (solo a riposo): qualche fotogramma della stessa inquadratura, analizzato come nell'acquisizione continua -->
+        <Button Text="📷"
+                Command="{Binding SingleShotCommand}"
+                IsVisible="{Binding IsIdle}"
+                VerticalOptions="End" HorizontalOptions="Center" TranslationX="96" Margin="0,0,0,38"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="22" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Scatto singolo: conta le monete inquadrate tenendo fermo il telefono" />
+
+        <!-- Scatto: mentre si inquadra (telecamera a tutto schermo) il pulsante di scatto al posto di ▶, e ✕ per uscire -->
+        <Button Text="◉"
+                Command="{Binding ShutterCommand}"
+                IsVisible="{Binding IsShotPreview}"
+                VerticalOptions="End" HorizontalOptions="Center" Margin="0,0,0,28"
+                WidthRequest="80" HeightRequest="80" CornerRadius="40" Padding="0"
+                FontSize="40" TextColor="White" BackgroundColor="#88FFFFFF" BorderColor="White" BorderWidth="3"
+                SemanticProperties.Description="Scatta: tieni fermo il telefono sopra le monete" />
+        <Button Text="✕"
+                Command="{Binding CancelShotCommand}"
+                IsVisible="{Binding IsShotPreview}"
+                VerticalOptions="End" HorizontalOptions="End" Margin="0,0,28,42"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="22" TextColor="White" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Esci senza scattare" />
+
+        <!-- Ricomincia: salva la parte acquisita e riparte (solo durante l'acquisizione) -->
+        <Button Text="↻"
+                Command="{Binding RestartCommand}"
+                IsVisible="{Binding CanRestart}"
+                VerticalOptions="End" HorizontalOptions="End" Margin="0,0,28,38"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="24" TextColor="White" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Salva la parte acquisita e ricomincia" />
+
+        <!-- Posizione persa: la freccia dice dove spostare il telefono per tornare nella zona già ripresa (si aggiorna mentre ti muovi) -->
+        <Border IsVisible="{Binding HasRecovery}" VerticalOptions="Center" HorizontalOptions="Center" Margin="24,0"
+                Padding="24,18" StrokeThickness="0" StrokeShape="RoundRectangle 26" BackgroundColor="#B3000000" InputTransparent="True">
+            <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
+                <Image Source="{Binding LastGoodImage}" Rotation="{Binding LastGoodRotation}" HeightRequest="130" HorizontalOptions="Center"
+                       SemanticProperties.Description="Ultima zona agganciata: cercala sul tavolo" />
+                <Label Text="▲" FontSize="84" TextColor="#FF9800" HorizontalOptions="Center"
+                       Rotation="{Binding ArrowRotation}" SemanticProperties.Description="Direzione in cui spostare il telefono" />
+                <Label Text="{Binding RecoveryText}" TextColor="White" FontSize="16" FontAttributes="Bold"
+                       HorizontalTextAlignment="Center" LineBreakMode="WordWrap" MaximumWidthRequest="300" />
+            </VerticalStackLayout>
+        </Border>
+
+        <!-- Torcia: con poca luce l'immagine si sfoca (solo durante l'acquisizione, se il telefono ce l'ha) -->
+        <Button Text="{Binding TorchSymbol}"
+                Command="{Binding ToggleTorchCommand}"
+                IsVisible="{Binding CanTorch}"
+                VerticalOptions="End" HorizontalOptions="Start" Margin="28,0,0,38"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="22" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Accendi o spegni la torcia" />
+
+        <!-- Importa una foto (solo a riposo) -->
+        <Button Text="🖼"
+                Command="{Binding ImportPhotoCommand}"
+                IsVisible="{Binding IsIdle}"
+                VerticalOptions="End" HorizontalOptions="Start" Margin="28,0,0,38"
+                WidthRequest="52" HeightRequest="52" CornerRadius="26" Padding="0"
+                FontSize="22" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
+                SemanticProperties.Description="Importa una foto dalla galleria" />
+
+        <!-- Elaborazione dopo lo stop -->
+        <Grid IsVisible="{Binding IsProcessing}" BackgroundColor="#AA000000">
+            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Fill" Margin="40,0" Spacing="14">
+                <ActivityIndicator IsRunning="{Binding IsProcessing}" Color="White" HeightRequest="44" />
+                <Label Text="{Binding StatusText}" TextColor="White" FontSize="16" FontAttributes="Bold" HorizontalTextAlignment="Center" />
+                <ProgressBar Progress="{Binding Progress}" ProgressColor="#2ECC71" />
+                <Label Text="{Binding ProgressText}" TextColor="#DDDDDD" FontSize="13" HorizontalTextAlignment="Center" />
+                <Button Text="Interrompi" Command="{Binding CancelProcessingCommand}" HorizontalOptions="Center"
+                        BackgroundColor="Transparent" TextColor="White" BorderColor="White" BorderWidth="1" CornerRadius="10" />
+            </VerticalStackLayout>
+        </Grid>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:LiveCoinCounter.ViewModels"
+             xmlns:models="clr-namespace:LiveCoinCounter.Models;assembly=Recognition.Core"
+             x:Class="LiveCoinCounter.Views.SessionSummaryPage"
+             x:DataType="vm:SessionSummaryViewModel"
+             Title="Riepilogo"
+             BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Rinomina" Order="Secondary" Command="{Binding RenameCommand}" />
+        <ToolbarItem Text="Esporta" Order="Secondary" Command="{Binding ExportCommand}" />
+        <ToolbarItem Text="Elimina" Order="Secondary" Command="{Binding DeleteCommand}" />
+    </ContentPage.ToolbarItems>
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <VerticalStackLayout Spacing="2">
+                <Label Text="{Binding Name}" FontSize="18" FontAttributes="Bold"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                <Label Text="{Binding DateText}" FontSize="12"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+            </VerticalStackLayout>
+
+            <!-- Totale -->
+            <Border Padding="20,16" StrokeThickness="0" BackgroundColor="{StaticResource Primary}" StrokeShape="RoundRectangle 16">
+                <Grid ColumnDefinitions="*,Auto">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="TOTALE" FontSize="11" FontAttributes="Bold" TextColor="#CCFFFFFF" CharacterSpacing="1" />
+                        <Label Text="{Binding TotalText}" FontSize="40" FontAttributes="Bold" TextColor="White" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                        <Label Text="{Binding CoinCount}" FontSize="32" FontAttributes="Bold" TextColor="White" HorizontalTextAlignment="End" />
+                        <Label Text="monete" FontSize="12" TextColor="#CCFFFFFF" HorizontalTextAlignment="End" />
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
+
+            <!-- Sessione interrotta -->
+            <Border IsVisible="{Binding NeedsCompletion}" Padding="14,10" StrokeThickness="1" Stroke="#FF9800"
+                    BackgroundColor="{AppThemeBinding Light=#FFF3E0, Dark=#3E2A10}" StrokeShape="RoundRectangle 12">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="La sessione è stata interrotta prima del riconoscimento del valore." FontSize="13"
+                           TextColor="{AppThemeBinding Light=#7A4A00, Dark=#FFCC80}" />
+                    <Button Text="Completa la sessione" Command="{Binding CompleteCommand}" CornerRadius="10" BackgroundColor="#FF9800" TextColor="Black" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Monete incerte -->
+            <Border IsVisible="{Binding HasUncertain}" Padding="14,10" StrokeThickness="1" Stroke="#FF9800"
+                    BackgroundColor="{AppThemeBinding Light=#FFF3E0, Dark=#3E2A10}" StrokeShape="RoundRectangle 12">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="{Binding UncertainText}" FontSize="13" TextColor="{AppThemeBinding Light=#7A4A00, Dark=#FFCC80}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Text="Vedi incerte" Command="{Binding ShowUncertainCommand}" CornerRadius="10" FontSize="13"
+                                BackgroundColor="Transparent" BorderColor="#FF9800" BorderWidth="1"
+                                TextColor="{AppThemeBinding Light=#7A4A00, Dark=#FFCC80}" />
+                        <Button Grid.Column="1" Text="🌐 Riprova con l'AI" Command="{Binding RetryAiCommand}" IsVisible="{Binding CanRetryAi}"
+                                CornerRadius="10" FontSize="13" BackgroundColor="#FF9800" TextColor="Black" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <HorizontalStackLayout IsVisible="{Binding IsBusy}" Spacing="10" HorizontalOptions="Center">
+                <ActivityIndicator IsRunning="{Binding IsBusy}" HeightRequest="24" />
+                <Label Text="{Binding BusyText}" VerticalOptions="Center" FontSize="13"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
+            </HorizontalStackLayout>
+
+            <Button Text="🪙 Vedi tutte le monete" Command="{Binding ShowCoinsCommand}" CornerRadius="12" />
+
+            <!-- Verifica: ciò che l'utente conferma o corregge diventa il riferimento per il debug -->
+            <Border Padding="14,10" StrokeThickness="1" StrokeShape="RoundRectangle 12"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="VERIFICA DELLA PROVA" FontSize="11" FontAttributes="Bold" CharacterSpacing="1"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                    <Label Text="{Binding ReviewText}" FontSize="13"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray700}, Dark={StaticResource Gray300}}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Text="✓ Tutte giuste" Command="{Binding AllCorrectCommand}" IsVisible="{Binding CanMarkAllCorrect}"
+                                CornerRadius="10" FontSize="13" BackgroundColor="#2ECC71" TextColor="Black" />
+                        <Button Grid.Column="1" Text="📝 Nota" Command="{Binding NoteCommand}" CornerRadius="10" FontSize="13"
+                                BackgroundColor="Transparent" BorderWidth="1" BorderColor="{StaticResource Secondary}" TextColor="{StaticResource Secondary}" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Dettaglio per taglio -->
+            <Label Text="DETTAGLIO PER TAGLIO" FontSize="11" FontAttributes="Bold" CharacterSpacing="1"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Denominations}" Spacing="6">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="models:CoinResult">
+                        <Border Padding="14,10" StrokeThickness="1" StrokeShape="RoundRectangle 10"
+                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray700}}"
+                                BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <Label Text="{Binding Denomination}" FontSize="15" FontAttributes="Bold" VerticalOptions="Center"
+                                       TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                                <Border Grid.Column="1" BackgroundColor="{StaticResource Primary}" StrokeShape="RoundRectangle 20"
+                                        StrokeThickness="0" Padding="10,4" Margin="8,0">
+                                    <Label Text="{Binding Count, StringFormat='×{0}'}" FontSize="14" FontAttributes="Bold" TextColor="White" />
+                                </Border>
+                                <Label Grid.Column="2" Text="{Binding TotalValueFormatted}" FontSize="16" FontAttributes="Bold"
+                                       VerticalOptions="Center" TextColor="{StaticResource Primary}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </VerticalStackLayout>
+
+            <!-- Mosaico annotato -->
+            <Label Text="SUPERFICIE ACQUISITA" FontSize="11" FontAttributes="Bold" CharacterSpacing="1" IsVisible="{Binding HasMosaic}"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+            <!-- Le opzioni della superficie: valgono anche a tutto schermo -->
+            <Border IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" Padding="14,10"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray900}}">
+                <VerticalStackLayout Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label Text="Riquadri e valori delle monete" FontSize="14" VerticalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                        <Switch Grid.Column="1" IsToggled="{Binding Options.ShowBoxes}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout VerticalOptions="Center">
+                            <Label Text="{Binding Options.GridText}" FontSize="14"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                            <Label Text="{Binding Options.ScaleText}" FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+                        <Switch Grid.Column="1" IsToggled="{Binding Options.ShowGrid}" IsEnabled="{Binding Options.CanGrid}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <Label Text="Vista" FontSize="14" VerticalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                        <Picker Grid.Column="1" ItemsSource="{Binding Options.Views}" SelectedItem="{Binding Options.SelectedView}" FontSize="14"
+                                TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" HorizontalOptions="Fill" />
+                    </Grid>
+                    <Button Text="⤢ Schermo intero" Command="{Binding OpenSurfaceCommand}" HorizontalOptions="Fill" HeightRequest="40" CornerRadius="20"
+                            FontSize="14" TextColor="White" BackgroundColor="{StaticResource Primary}"
+                            SemanticProperties.Description="Apri la superficie acquisita a tutto schermo per ingrandirla" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Sessione a scatti: una superficie per scatto, da scorrere con le frecce o con uno swipe -->
+            <Grid IsVisible="{Binding IsShots}" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Button Text="◀" Command="{Binding PreviousShotCommand}" WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="0"
+                        FontSize="18" TextColor="White" BackgroundColor="{StaticResource Primary}"
+                        SemanticProperties.Description="Superficie precedente" />
+                <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                    <Label Text="{Binding ShotPositionText}" FontSize="15" FontAttributes="Bold" HorizontalTextAlignment="Center"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Label Text="{Binding ShotTotalText}" FontSize="11" HorizontalTextAlignment="Center"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                </VerticalStackLayout>
+                <Button Grid.Column="2" Text="▶" Command="{Binding NextShotCommand}" WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="0"
+                        FontSize="18" TextColor="White" BackgroundColor="{StaticResource Primary}"
+                        SemanticProperties.Description="Superficie successiva" />
+            </Grid>
+
+            <!-- La superficie, pulita -->
+            <!-- Altezza fissa (vedi il code-behind): cambiando superficie la pagina non si sposta. Tocco e swipe li gestisce il
+                 code-behind, così il trascinamento verticale resta allo scorrimento della pagina. -->
+            <Border x:Name="SurfaceFrame" IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" BackgroundColor="#121214">
+                <Image x:Name="SurfaceImage" Source="{Binding MosaicImage}" Aspect="AspectFit" />
+            </Border>
+
+            <!-- lo scatto mostrato: rifarlo o eliminarlo; oppure aggiungerne un altro -->
+            <Grid IsVisible="{Binding IsShots}" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Text="↻ Rifai scatto" Command="{Binding RetakeShotCommand}" CornerRadius="12" FontSize="13"
+                        BackgroundColor="Transparent" BorderWidth="1" BorderColor="{StaticResource Primary}" TextColor="{StaticResource Primary}"
+                        SemanticProperties.Description="Rifai lo scatto mostrato: il nuovo prende il suo posto" />
+                <Button Grid.Column="1" Text="🗑 Elimina scatto" Command="{Binding DeleteShotCommand}" CornerRadius="12" FontSize="13"
+                        BackgroundColor="Transparent" BorderWidth="1" BorderColor="#E53935" TextColor="#E53935"
+                        SemanticProperties.Description="Elimina lo scatto mostrato: le sue monete escono dal totale" />
+            </Grid>
+            <Button IsVisible="{Binding IsShots}" Text="📷 Altro scatto" Command="{Binding AnotherShotCommand}" CornerRadius="12"
+                    SemanticProperties.Description="Aggiungi a questa sessione uno scatto su un'altra parte del tavolo" />
+
+            <Label Text="{Binding MethodText}" FontSize="11" HorizontalTextAlignment="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray500}}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

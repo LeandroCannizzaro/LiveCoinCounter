@@ -1,0 +1,569 @@
+using System.Diagnostics;
+
+namespace LiveCoinCounter.Mosaic;
+
+/// <summary>Un fotogramma della fotocamera, con la posa ARCore quando disponibile.</summary>
+/// <param name="RotationDegrees">Rotazione (0/90/180/270) che porta il fotogramma dritto rispetto allo schermo.</param>
+public sealed record CameraFrame(ArgbImage Image, long TimestampNs, int RotationDegrees, PlanarPose? Pose = null);
+
+public enum TrackStatus
+{
+    /// <summary>In attesa di qualcosa per partire (es. ARCore non ha ancora trovato il piano del tavolo).</summary>
+    Initializing,
+    Tracking,
+    Lost
+}
+
+/// <summary>Esito del tracking di un fotogramma.</summary>
+/// <param name="FrameToMosaic">Omografia fotogramma (pixel) → mosaico; null se il fotogramma non è stato collocato.</param>
+/// <param name="Sharpness">Varianza del laplaciano sul fotogramma ridotto.</param>
+/// <param name="PxPerMm">Scala del mosaico in pixel per millimetro, se nota (ARCore).</param>
+public sealed record TrackResult(TrackStatus Status, Homography? FrameToMosaic, double Sharpness, string? Hint = null,
+    int Inliers = 0, double? PxPerMm = null, TrackDetail? Detail = null, PoseEstimate? Estimate = null);
+
+/// <summary>
+/// Dove si trova (a stima) il telefono quando il fotogramma non si aggancia a nessun riferimento: si segue il movimento
+/// da un frame al successivo (odometria) a partire dall'ultima posizione affidabile. Non entra mai nel mosaico: serve a
+/// guidare l'utente e a scegliere meglio i riferimenti con cui riagganciarsi.
+/// </summary>
+/// <param name="FrameToMosaic">Posa stimata del fotogramma.</param>
+/// <param name="ToLastReliable">Vettore, nel mosaico, dal centro stimato dell'inquadratura al centro dell'ultimo fotogramma agganciato.</param>
+/// <param name="Tracked">Vero se il movimento è stato misurato su questo fotogramma, falso se la posizione è solo mantenuta.</param>
+public sealed record PoseEstimate(Homography FrameToMosaic, PointD ToLastReliable, bool Tracked);
+
+/// <summary>Un tentativo di agganciare il fotogramma a un fotogramma chiave. <see cref="Outcome"/>: ok, few_matches, ransac_failed, low_ratio, not_better o implausible:motivo.</summary>
+public sealed record CandidateAttempt(int Keyframe, int Matches, int Inliers, double InlierRatio, string Outcome);
+
+/// <summary>Perché il tracking ha dato quel risultato: serve al registro diagnostico, non alla logica.</summary>
+public sealed record TrackDetail(string Source, int Features, int KeyframeCount, int LostFrames, bool Relocalizing,
+    IReadOnlyList<CandidateAttempt> Attempts, string? Reason = null, double? Deviation = null, int Anchors = 0, bool AnchorAdded = false,
+    TrackTimings? Timings = null);
+
+/// <summary>Quanto è costata ogni fase del tracking di un fotogramma, in millisecondi (<c>MatchMs</c> include RANSAC).</summary>
+public sealed record TrackTimings(double GrayMs, double ExtractMs, double MatchMs);
+
+/// <summary>
+/// Colloca ogni fotogramma nel mosaico. Tre implementazioni, scelte nelle impostazioni: feature (OpenCV o codice puro),
+/// ARCore (posa della fotocamera + piano del tavolo) e ibrida.
+/// </summary>
+public interface IMosaicTracker
+{
+    string Id { get; }
+
+    TrackResult Process(CameraFrame frame);
+
+    /// <summary>Il fotogramma appena elaborato diventa fotogramma chiave con questa omografia (serve da riferimento ai successivi).</summary>
+    void CommitKeyframe(Homography frameToMosaic);
+}
+
+/// <summary>
+/// Mette in relazione due fotogrammi chiave confrontandone direttamente le immagini (punti caratteristici), senza passare dal
+/// mosaico: il confronto diretto non risente della deriva accumulata dalla catena di fotogrammi.
+/// </summary>
+public interface IKeyframeRelator
+{
+    /// <summary>
+    /// Omografia dai pixel del fotogramma chiave <paramref name="from"/> a quelli del fotogramma chiave <paramref name="to"/>
+    /// (indici nell'ordine in cui sono diventati chiave), con il numero di inlier; null se le due immagini non si sovrappongono abbastanza.
+    /// </summary>
+    (Homography FromToTo, int Inliers)? Relate(int from, int to);
+}
+
+public sealed record FeatureTrackerOptions
+{
+    /// <summary>Lato massimo dell'immagine in grigio usata per le feature.</summary>
+    public int TrackingMaxSide { get; init; } = 640;
+    public int MaxFeatures { get; init; } = 600;
+
+    /// <summary>
+    /// Pixel del mosaico per pixel del primo fotogramma: 0,75 dà un mosaico dettagliato (da ingrandire a tutto schermo) e
+    /// resta leggero (il rilevamento usa i fotogrammi originali). Era 0,5.
+    /// </summary>
+    public double MosaicScale { get; init; } = 0.75;
+    public double RansacThreshold { get; init; } = 3.0;
+    public int MinInliers { get; init; } = 20;
+    public double MinInlierRatio { get; init; } = 0.2;
+
+    /// <summary>Quanti fotogrammi chiave vicini provare per ogni fotogramma.</summary>
+    public int CandidateKeyframes { get; init; } = 3;
+
+    /// <summary>Dopo quanti fotogrammi non collocati di fila il tracking si considera perso.</summary>
+    public int LostAfter { get; init; } = 4;
+
+    /// <summary>Punti minimi nel primo fotogramma: senza, il mosaico partirebbe da una base su cui non ci si può riagganciare.</summary>
+    public int MinInitialFeatures { get; init; } = 40;
+
+    // ---- fotogrammi di aggancio ----
+    // Dalle prove sul campo: con un solo fotogramma chiave per decine di secondi gli inlier calano da 350 a 20 in poco più
+    // di un secondo (tavolo metallico, riflessi) e il tracking si perde. Il tracker aggiunge da sé fotogrammi di aggancio
+    // leggeri (solo punti caratteristici, nessun mosaico né rilevamento) così i frame si confrontano sempre con uno vicino.
+
+    /// <summary>Un nuovo fotogramma di aggancio quando il centro dista più di questa frazione del lato del fotogramma dal più vicino.</summary>
+    public double AnchorSpacing { get; init; } = 0.3;
+
+    /// <summary>…oppure quando l'aggancio è debole (meno inlier di così), purché siano almeno <see cref="MinAnchorInliers"/>.</summary>
+    public int AnchorBelowInliers { get; init; } = 60;
+    public int MinAnchorInliers { get; init; } = 25;
+
+    /// <summary>Fotogrammi minimi tra due fotogrammi di aggancio.</summary>
+    public int MinAnchorGapFrames { get; init; } = 2;
+
+    /// <summary>Oltre questo numero si scartano i fotogrammi di aggancio più vecchi (quelli chiave restano).</summary>
+    public int MaxAnchors { get; init; } = 120;
+
+    /// <summary>Frazione minima di inlier per il confronto guidato (0,2 è troppo severa: ammette più falsi, e conta il numero).</summary>
+    public double GuidedMinInlierRatio { get; init; } = 0.08;
+
+    /// <summary>Inlier minimi per accettare un aggancio guidato col frame precedente.</summary>
+    public int MinGuidedInliers { get; init; } = 25;
+
+    /// <summary>Inlier minimi per misurare il movimento da persi (odometria): più bassi, la stima non entra nel mosaico.</summary>
+    public int MinOdometryInliers { get; init; } = 12;
+
+    /// <summary>Raggio di ricerca dell'accoppiamento guidato col frame precedente, in frazione del lato maggiore (0,18 = 115 px su 640).</summary>
+    public double GuidedRadius { get; init; } = 0.18;
+
+    /// <summary>Se un candidato ha già almeno questi inlier (e rapporto ≥ 0,5) non si provano gli altri: dimezza il tempo per fotogramma.</summary>
+    public int EarlyAcceptInliers { get; init; } = 80;
+
+    /// <summary>Un riferimento fisso (chiave o aggancio) vince sul fotogramma precedente se ha almeno questa frazione dei suoi inlier.</summary>
+    public double FixedReferenceMinShare { get; init; } = 0.6;
+
+    /// <summary>
+    /// Se un riferimento fisso con abbastanza inlier colloca il fotogramma lontano dalla catena (scostamento medio degli angoli oltre
+    /// questa frazione della diagonale) vince comunque: la catena ha derivato. 0 = disattivato.
+    /// </summary>
+    public double DriftOverrideDeviation { get; init; } = 0;
+}
+
+/// <summary>
+/// Tracking con punti caratteristici: ogni fotogramma si confronta con i fotogrammi chiave vicini (non solo con il
+/// precedente, così l'errore non si accumula) e si colloca con RANSAC. Se si perde, prova a rilocalizzarsi su tutti i
+/// fotogrammi chiave a turno, partendo da quelli vicini all'ultima posizione nota.
+/// </summary>
+public sealed class FeatureMosaicTracker : IMosaicTracker, IKeyframeRelator
+{
+    private sealed record Keyframe(FeatureSet Features, float GrayScale, Homography FrameToMosaic, PointD Center, double AreaScale, bool IsAnchor = false);
+
+    private readonly IFeatureExtractor _extractor;
+    private readonly FeatureTrackerOptions _options;
+    private readonly List<Keyframe> _keyframes = new();
+    private Homography? _last;
+    private int _lostFrames;
+    private int _relocalizeOffset;
+    private (FeatureSet Features, float Scale, int Width, int Height)? _pending;
+    private int _framesSinceAnchor = int.MaxValue / 2;
+
+    /// <summary>L'ultimo fotogramma collocato (con qualsiasi riferimento): primo candidato per il fotogramma successivo.</summary>
+    private Keyframe? _previous;
+
+    /// <summary>Durante la perdita: l'ultimo fotogramma di cui si è misurato il movimento, con la posa stimata.</summary>
+    private Keyframe? _odometry;
+    private Homography? _odometryPose;
+
+    public FeatureMosaicTracker(IFeatureExtractor extractor, FeatureTrackerOptions? options = null)
+    {
+        _extractor = extractor;
+        _options = options ?? new FeatureTrackerOptions();
+    }
+
+    public string Id => "features-" + _extractor.Id;
+
+    public int KeyframeCount => _keyframes.Count;
+
+    public TrackResult Process(CameraFrame frame) => Process(frame, prior: null);
+
+    /// <param name="prior">Stima a priori dell'omografia (modalità ibrida): guida la scelta dei fotogrammi chiave e il primo fotogramma.</param>
+    public TrackResult Process(CameraFrame frame, Homography? prior)
+    {
+        var phase = Stopwatch.StartNew();
+        var gray = ImageOps.ToGray(frame.Image, _options.TrackingMaxSide, out var scale);
+        var sharpness = ImageOps.Sharpness(gray);
+        var grayMs = phase.Elapsed.TotalMilliseconds;
+        phase.Restart();
+        var features = _extractor.Extract(gray, _options.MaxFeatures);
+        var extractMs = phase.Elapsed.TotalMilliseconds;
+        _pending = (features, scale, frame.Image.Width, frame.Image.Height);
+
+        if (_keyframes.Count == 0)
+        {
+            if (features.Count < _options.MinInitialFeatures)
+                return new TrackResult(TrackStatus.Initializing, null, sharpness,
+                    "Inquadra una zona con le monete e tieni fermo il telefono (serve più luce o più dettaglio)", Inliers: features.Count,
+                    Detail: new TrackDetail(Id, features.Count, 0, 0, false, Array.Empty<CandidateAttempt>(), "too_few_features"));
+
+            var initial = prior ?? Initial(frame);
+            _last = initial;
+            var firstCenter = new PointD(frame.Image.Width / 2.0, frame.Image.Height / 2.0);
+            _previous = new Keyframe(features, scale, initial, Map(initial, firstCenter), initial.AreaScaleAt(firstCenter.X, firstCenter.Y));
+            return new TrackResult(TrackStatus.Tracking, initial, sharpness, Inliers: features.Count,
+                Detail: new TrackDetail(Id, features.Count, 0, 0, false, Array.Empty<CandidateAttempt>(), "first_frame"));
+        }
+
+        var center = new PointD(frame.Image.Width / 2.0, frame.Image.Height / 2.0);
+        // da persi i riferimenti da provare sono quelli vicini a dove si crede di essere ora, non all'ultima posizione nota
+        var predicted = prior ?? _odometryPose ?? _last;
+        var predictedCenter = predicted is { } p ? Map(p, center) : _keyframes[^1].Center;
+
+        var ordered = _keyframes.OrderBy(k => k.Center.DistanceTo(predictedCenter)).ToList();
+        var nearest = ordered.Take(_options.CandidateKeyframes).ToList();
+        var relocalizing = _lostFrames >= _options.LostAfter && ordered.Count > nearest.Count;
+        if (relocalizing)
+        {
+            // rilocalizzazione: a ogni fotogramma un gruppo diverso di fotogrammi chiave, dai più vicini ai più lontani
+            _relocalizeOffset = (_relocalizeOffset + _options.CandidateKeyframes) % ordered.Count;
+            nearest.AddRange(ordered.Skip(_relocalizeOffset).Take(_options.CandidateKeyframes));
+            nearest = nearest.Distinct().ToList();
+        }
+
+        var attempts = new List<CandidateAttempt>();
+        var successes = new List<(Homography H, int Inliers, bool IsPrevious)>();
+        var matchTimer = Stopwatch.StartNew();
+
+        // Un candidato: punti in comune, RANSAC, controllo di plausibilità. Gli esiti vanno nel registro.
+        bool Try(Keyframe reference, int index, bool isPrevious)
+        {
+            // il frame precedente è vicino nel tempo: ogni punto cerca solo nei dintorni (accoppiamento guidato)
+            var matches = isPrevious
+                ? FeatureMatcher.MatchNear(features, reference.Features, (float)(_options.GuidedRadius * Math.Max(gray.Width, gray.Height)))
+                : FeatureMatcher.Match(features, reference.Features);
+            var ransac = HomographyRansac.Estimate(matches, _options.RansacThreshold, minInliers: _options.MinInliers);
+            if (ransac is null)
+            {
+                attempts.Add(new CandidateAttempt(index, matches.Count, 0, 0, matches.Count < _options.MinInliers ? "few_matches" : "ransac_failed"));
+                return false;
+            }
+            // l'accoppiamento guidato ammette più falsi (nella prova: 35 inlier su 176 = 20%): conta il numero, non la frazione
+            var minRatio = isPrevious ? _options.GuidedMinInlierRatio : _options.MinInlierRatio;
+            if (ransac.InlierRatio < minRatio || (isPrevious && ransac.Inliers < _options.MinGuidedInliers))
+            {
+                attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "low_ratio"));
+                return false;
+            }
+
+            // da pixel in grigio del fotogramma a pixel in grigio del riferimento → pixel originali → mosaico
+            var frameToReference = Homography.Scale(1 / reference.GrayScale) * ransac.Homography * Homography.Scale(scale);
+            var candidate = reference.FrameToMosaic * frameToReference;
+            var problem = Implausible(candidate, frame.Image.Width, frame.Image.Height, reference.AreaScale);
+            if (problem is not null)
+            {
+                attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "implausible:" + problem));
+                return false;
+            }
+
+            attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "ok"));
+            successes.Add((candidate, ransac.Inliers, isPrevious));
+            return true;
+        }
+
+        // 1) il fotogramma collocato subito prima (index -1): stesso stato di fuoco, luce e riflessi, quindi di solito il
+        //    confronto migliore, e funziona anche su un tavolo povero di dettagli dove i fotogrammi vecchi non servono più
+        var previousOk = false;
+        if (_previous is { } previous)
+            previousOk = Try(previous, -1, isPrevious: true);
+
+        // 2) i fotogrammi chiave e di aggancio più vicini: correggono la deriva della catena. Se il precedente ha agganciato
+        //    molto bene basta il più vicino.
+        var limit = previousOk && successes[0].Inliers >= _options.EarlyAcceptInliers ? 1 : nearest.Count;
+        foreach (var reference in nearest.Take(limit))
+        {
+            if (_previous is { } prev && ReferenceEquals(prev.Features, reference.Features)) continue;   // è già stato provato
+            Try(reference, _keyframes.IndexOf(reference), isPrevious: false);
+        }
+        var matchMs = matchTimer.Elapsed.TotalMilliseconds;
+        var timings = new TrackTimings(grayMs, extractMs, matchMs);
+
+        if (successes.Count == 0)
+        {
+            _lostFrames++;
+            var lost = _lostFrames >= _options.LostAfter;
+            var estimate = EstimateByOdometry(features, scale, gray.Width, gray.Height, frame.Image.Width, frame.Image.Height);
+            return new TrackResult(lost ? TrackStatus.Lost : TrackStatus.Tracking, null, sharpness,
+                lost ? "Posizione persa: torna dove vedi il riquadro arancione, oppure tocca ↻ per ricominciare" : null,
+                Detail: new TrackDetail(Id, features.Count, _keyframes.Count, _lostFrames, relocalizing, attempts, "not_placed", Timings: timings),
+                Estimate: estimate);
+        }
+
+        // Si sceglie l'aggancio con più inlier; ma un riferimento fisso (chiave o aggancio) con inlier comparabili vince sul
+        // precedente: la catena fotogramma-su-fotogramma accumula deriva, i riferimenti no.
+        var top = successes.MaxBy(s => s.Inliers);
+        var chosen = top;
+        var references = successes.Where(s => !s.IsPrevious).ToList();
+        if (top.IsPrevious && references.Count > 0)
+        {
+            var fixedBest = references.MaxBy(s => s.Inliers);
+            if (fixedBest.Inliers >= _options.FixedReferenceMinShare * top.Inliers && fixedBest.Inliers >= 2 * _options.MinInliers) chosen = fixedBest;
+            else if (_options.DriftOverrideDeviation > 0 && fixedBest.Inliers >= 2 * _options.MinInliers &&
+                     HybridMosaicTracker.Deviation(fixedBest.H, top.H, frame.Image.Width, frame.Image.Height) > _options.DriftOverrideDeviation)
+                chosen = fixedBest;
+        }
+
+        _lostFrames = 0;
+        _odometry = null;          // riagganciati: la stima per odometria non serve più
+        _odometryPose = null;
+        _last = chosen.H;
+        _previous = new Keyframe(features, scale, chosen.H, Map(chosen.H, center), chosen.H.AreaScaleAt(center.X, center.Y));
+        _framesSinceAnchor++;
+        var anchored = TryAddAnchor(chosen.H, chosen.Inliers);
+        return new TrackResult(TrackStatus.Tracking, chosen.H, sharpness, Inliers: chosen.Inliers,
+            Detail: new TrackDetail(Id, features.Count, _keyframes.Count, 0, relocalizing, attempts, "placed",
+                Anchors: _keyframes.Count(k => k.IsAnchor), AnchorAdded: anchored, Timings: timings));
+    }
+
+    /// <summary>
+    /// Da persi: il movimento si misura rispetto all'ultimo fotogramma che si è riusciti a seguire (guidato, soglie più
+    /// basse), partendo dall'ultima posizione affidabile. Un fotogramma che non si lascia misurare mantiene la posizione
+    /// (nessun movimento supposto) e il successivo si confronta ancora con l'ultimo buono.
+    /// </summary>
+    private PoseEstimate? EstimateByOdometry(FeatureSet features, float scale, int grayWidth, int grayHeight, int width, int height)
+    {
+        if (_previous is null) return null;
+        var reference = _odometry ?? _previous;
+
+        var radius = (float)(_options.GuidedRadius * Math.Max(grayWidth, grayHeight));
+        var matches = FeatureMatcher.MatchNear(features, reference.Features, radius);
+        var ransac = HomographyRansac.Estimate(matches, _options.RansacThreshold, minInliers: _options.MinOdometryInliers);
+
+        var pose = reference.FrameToMosaic;
+        var tracked = false;
+        if (ransac is not null && ransac.InlierRatio >= _options.GuidedMinInlierRatio)
+        {
+            var frameToReference = Homography.Scale(1 / reference.GrayScale) * ransac.Homography * Homography.Scale(scale);
+            var candidate = reference.FrameToMosaic * frameToReference;
+            if (Implausible(candidate, width, height, reference.AreaScale) is null)
+            {
+                pose = candidate;
+                tracked = true;
+            }
+        }
+
+        var center = new PointD(width / 2.0, height / 2.0);
+        // ogni fotogramma perso diventa il riferimento del successivo (con la posa mantenuta se non si è riusciti a misurarlo):
+        // il frame seguente è quasi sempre simile a quello appena prima, anche quando entrambi sono lontani da ogni riferimento noto
+        _odometry = new Keyframe(features, scale, pose, Map(pose, center), pose.AreaScaleAt(center.X, center.Y));
+        _odometryPose = pose;
+
+        var here = Map(pose, center);
+        var target = _previous.Center;
+        return new PoseEstimate(pose, new PointD(target.X - here.X, target.Y - here.Y), tracked);
+    }
+
+    /// <summary>
+    /// Aggiunge il fotogramma appena collocato come fotogramma di aggancio se si è allontanato dai riferimenti noti o se
+    /// l'aggancio è debole: i frame successivi avranno sempre un riferimento vicino e simile.
+    /// </summary>
+    private bool TryAddAnchor(Homography frameToMosaic, int inliers)
+    {
+        if (_pending is not { } p || inliers < _options.MinAnchorInliers || _framesSinceAnchor < _options.MinAnchorGapFrames) return false;
+
+        var center = Map(frameToMosaic, new PointD(p.Width / 2.0, p.Height / 2.0));
+        var quad = frameToMosaic.MapRect(p.Width, p.Height);
+        var side = Math.Min(quad.A.DistanceTo(quad.B), quad.A.DistanceTo(quad.D));
+        var nearest = _keyframes.Min(k => k.Center.DistanceTo(center));
+        if (nearest < _options.AnchorSpacing * side && inliers >= _options.AnchorBelowInliers) return false;
+
+        _keyframes.Add(new Keyframe(p.Features, p.Scale, frameToMosaic, center, frameToMosaic.AreaScaleAt(p.Width / 2.0, p.Height / 2.0), IsAnchor: true));
+        _framesSinceAnchor = 0;
+        if (_keyframes.Count(k => k.IsAnchor) > _options.MaxAnchors)
+            _keyframes.RemoveAt(_keyframes.FindIndex(k => k.IsAnchor));
+        return true;
+    }
+
+    public void CommitKeyframe(Homography frameToMosaic)
+    {
+        if (_pending is not { } p)
+        {
+            lock (_committed) _committed.Add(null);       // l'indice deve restare quello del motore
+            return;
+        }
+        var center = Map(frameToMosaic, new PointD(p.Width / 2.0, p.Height / 2.0));
+        var area = frameToMosaic.AreaScaleAt(p.Width / 2.0, p.Height / 2.0);
+        var keyframe = new Keyframe(p.Features, p.Scale, frameToMosaic, center, area);
+        _keyframes.Add(keyframe);
+        lock (_committed) _committed.Add(keyframe);
+        _last = frameToMosaic;
+    }
+
+    /// <summary>Inlier minimi perché due fotogrammi chiave si dicano in relazione (più del minimo del tracking: qui si decide chi è chi).</summary>
+    public const int RelateMinInliers = 25;
+
+    // i fotogrammi chiave nell'ordine del motore (senza gli agganci); letto anche dal thread del rilevamento
+    private readonly List<Keyframe?> _committed = new();
+
+    public (Homography FromToTo, int Inliers)? Relate(int from, int to)
+    {
+        Keyframe? a, b;
+        lock (_committed)
+        {
+            if (from < 0 || to < 0 || from >= _committed.Count || to >= _committed.Count) return null;
+            a = _committed[from];
+            b = _committed[to];
+        }
+        if (a is null || b is null) return null;
+        var matches = FeatureMatcher.Match(a.Features, b.Features);
+        var ransac = HomographyRansac.Estimate(matches, _options.RansacThreshold, minInliers: _options.MinInliers);
+        if (ransac is null || ransac.Inliers < RelateMinInliers || ransac.InlierRatio < _options.MinInlierRatio) return null;
+        // pixel in grigio di a → pixel in grigio di b, riportati ai pixel originali
+        return (Homography.Scale(1 / b.GrayScale) * ransac.Homography * Homography.Scale(a.GrayScale), ransac.Inliers);
+    }
+
+    /// <summary>Primo fotogramma: ridotto alla scala del mosaico e ruotato come lo vede l'utente.</summary>
+    private Homography Initial(CameraFrame frame) =>
+        Homography.Scale(_options.MosaicScale) * Homography.Rotation(frame.RotationDegrees);
+
+    /// <summary>
+    /// Scarta omografie assurde: quadrilatero intrecciato, scala molto diversa dal riferimento, prospettiva estrema.
+    /// Restituisce il motivo dello scarto, o null se l'omografia è plausibile.
+    /// </summary>
+    private static string? Implausible(Homography h, int width, int height, double referenceArea)
+    {
+        if (!h.IsFinite) return "not_finite";
+        var quad = h.MapRect(width, height);
+        if (!quad.IsConvex) return "not_convex";
+        var area = h.AreaScaleAt(width / 2.0, height / 2.0);
+        var ratio = area / referenceArea;
+        if (ratio < 0.5 || ratio > 2.0) return $"area_ratio={ratio:0.00}";
+
+        // i lati opposti non devono differire troppo (fotocamera quasi parallela al tavolo)
+        var top = quad.A.DistanceTo(quad.B);
+        var bottom = quad.D.DistanceTo(quad.C);
+        var left = quad.A.DistanceTo(quad.D);
+        var right = quad.B.DistanceTo(quad.C);
+        if (top / bottom is not (> 0.5 and < 2)) return $"sides_h={top / bottom:0.00}";
+        if (left / right is not (> 0.5 and < 2)) return $"sides_v={left / right:0.00}";
+        return null;
+    }
+
+    private static PointD Map(Homography h, PointD p)
+    {
+        var (x, y) = h.Apply(p.X, p.Y);
+        return new PointD(x, y);
+    }
+}
+
+/// <summary>
+/// Tracking con ARCore: la posa della fotocamera e il piano del tavolo danno direttamente l'omografia fotogramma → piano,
+/// con scala metrica (pixel del mosaico per millimetro noti). Il primo fotogramma fissa l'orientamento del mosaico.
+/// </summary>
+public sealed class ArCorePlaneTracker : IMosaicTracker
+{
+    private readonly double _pxPerMm;
+    private Homography? _alignment;
+
+    public ArCorePlaneTracker(double pxPerMm = 2.0) => _pxPerMm = pxPerMm;
+
+    public string Id => "arcore";
+
+    public double PxPerMm => _pxPerMm;
+
+    public TrackResult Process(CameraFrame frame)
+    {
+        var gray = ImageOps.ToGray(frame.Image, 640, out _);
+        var sharpness = ImageOps.Sharpness(gray);
+        var pose = frame.Pose;
+
+        if (pose is null || !pose.CameraTracking)
+            return new TrackResult(TrackStatus.Lost, null, sharpness, "Muovi il telefono lentamente sopra il tavolo", PxPerMm: _pxPerMm,
+                Detail: PoseDetail(pose is null ? "no_pose" : "camera_not_tracking"));
+        if (pose.Plane is null)
+            return new TrackResult(TrackStatus.Initializing, null, sharpness, "Inquadra il tavolo finché viene riconosciuto", PxPerMm: _pxPerMm,
+                Detail: PoseDetail("no_plane"));
+
+        var imageToPlane = PlanarProjection.ImageToPlane(pose.Intrinsics, pose.Camera, pose.Plane.Value);
+        if (imageToPlane is null)
+            return new TrackResult(TrackStatus.Lost, null, sharpness, "Tieni il telefono puntato verso il tavolo", PxPerMm: _pxPerMm,
+                Detail: PoseDetail("pointing_away"));
+
+        // piano in metri → millimetri → pixel del mosaico
+        var toMosaic = Homography.Scale(_pxPerMm * 1000) * imageToPlane.Value;
+        _alignment ??= PlanarProjection.Alignment(toMosaic, frame.Image.Width, frame.Image.Height, frame.RotationDegrees);
+        var h = _alignment.Value * toMosaic;
+
+        return h.MapRect(frame.Image.Width, frame.Image.Height).IsConvex
+            ? new TrackResult(TrackStatus.Tracking, h, sharpness, PxPerMm: _pxPerMm, Detail: PoseDetail("placed"))
+            : new TrackResult(TrackStatus.Lost, null, sharpness, "Tieni il telefono più parallelo al tavolo", PxPerMm: _pxPerMm,
+                Detail: PoseDetail("not_convex"));
+    }
+
+    private TrackDetail PoseDetail(string reason) => new(Id, 0, 0, 0, false, Array.Empty<CandidateAttempt>(), reason);
+
+    public void CommitKeyframe(Homography frameToMosaic) { }
+}
+
+/// <summary>
+/// Ibrido: la posa ARCore dà una stima robusta anche nei movimenti veloci, le feature la affinano al pixel contro i
+/// fotogrammi chiave vicini (cuciture più pulite). Se l'affinamento si discosta troppo dalla posa si tiene la posa.
+/// </summary>
+public sealed class HybridMosaicTracker : IMosaicTracker, IKeyframeRelator
+{
+    private readonly ArCorePlaneTracker _pose;
+    private readonly FeatureMosaicTracker _features;
+    private readonly double _maxDeviation;
+
+    /// <param name="maxDeviation">Scostamento massimo medio degli angoli, in frazione della diagonale del fotogramma proiettato.</param>
+    public HybridMosaicTracker(ArCorePlaneTracker pose, FeatureMosaicTracker features, double maxDeviation = 0.08)
+    {
+        _pose = pose;
+        _features = features;
+        _maxDeviation = maxDeviation;
+    }
+
+    public string Id => "hybrid";
+
+    /// <summary>
+    /// Fotogrammi elaborati senza piano del tavolo dopo i quali si prosegue con i soli punti caratteristici (circa 5 secondi): su un
+    /// tavolo scuro e uniforme ARCore può non trovare il piano per decine di secondi, e intanto non si acquisiva nulla.
+    /// </summary>
+    public const int FallbackAfterFrames = 40;
+
+    private int _waitingForPlane;
+    private bool _placedOnce;
+    private bool _featuresOnly;
+
+    public TrackResult Process(CameraFrame frame)
+    {
+        if (_featuresOnly)
+        {
+            var alone = _features.Process(frame);
+            return alone with { Detail = alone.Detail is { } d ? d with { Source = Id, Reason = "features_only:" + d.Reason } : null };
+        }
+
+        var coarse = _pose.Process(frame);
+        if (coarse.FrameToMosaic is not { } prior)
+        {
+            // per coerenza del mosaico il cambio si fa solo prima di aver collocato qualcosa con ARCore
+            if (!_placedOnce && ++_waitingForPlane >= FallbackAfterFrames)
+            {
+                _featuresOnly = true;
+                return Process(frame);
+            }
+            return coarse;
+        }
+        _placedOnce = true;
+
+        var refined = _features.Process(frame, prior);
+        var detail = refined.Detail! with { Source = Id };
+        if (refined.FrameToMosaic is { } h)
+        {
+            var deviation = Deviation(h, prior, frame.Image.Width, frame.Image.Height);
+            if (deviation <= _maxDeviation)
+                return coarse with { FrameToMosaic = h, Inliers = refined.Inliers, Detail = detail with { Reason = "refined", Deviation = deviation } };
+            return coarse with { Detail = detail with { Reason = "pose_only:deviation", Deviation = deviation } };
+        }
+
+        return coarse with { Detail = detail with { Reason = "pose_only:" + detail.Reason } };
+    }
+
+    public void CommitKeyframe(Homography frameToMosaic) => _features.CommitKeyframe(frameToMosaic);
+
+    public (Homography FromToTo, int Inliers)? Relate(int from, int to) => _features.Relate(from, to);
+
+    public static double Deviation(Homography a, Homography b, int width, int height)
+    {
+        var qa = a.MapRect(width, height);
+        var qb = b.MapRect(width, height);
+        var diagonal = qb.A.DistanceTo(qb.C);
+        var mean = qa.Points.Zip(qb.Points, (p, q) => p.DistanceTo(q)).Average();
+        return diagonal <= 0 ? double.MaxValue : mean / diagonal;
+    }
+}

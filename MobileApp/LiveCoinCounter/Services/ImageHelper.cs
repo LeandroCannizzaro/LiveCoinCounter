@@ -1,6 +1,7 @@
 using Android.Graphics;
 using Android.Media;
 using LiveCoinCounter.Models;
+using LiveCoinCounter.Services.Sessions;
 
 namespace LiveCoinCounter.Services;
 
@@ -110,6 +111,146 @@ public static class ImageHelper
         {
             return original;
         }
+    }
+
+    /// <summary>
+    /// Il mosaico di una sessione con il riquadro di ogni moneta e il suo valore (verde sicura, arancione incerta,
+    /// blu corretta a mano, grigio esclusa). Null se la sessione non ha un mosaico salvato.
+    /// </summary>
+    public static byte[]? DrawSessionMosaic(LiveCoinCounter.Sessions.SessionRecord session, IReadOnlyList<LiveCoinCounter.Sessions.CoinRecord> coins,
+        SurfaceRender? options = null)
+    {
+        options ??= new SurfaceRender();
+        var wanted = SessionStorage.MosaicPathFor(session.Id, options.View);
+        // le sessioni vecchie hanno solo il mosaico unico: si usa quello
+        var path = File.Exists(wanted) ? wanted : session.MosaicPreviewPath;
+        if (path is null || !File.Exists(path)) return null;
+        try
+        {
+            using var decoded = BitmapFactory.DecodeFile(path);
+            if (decoded is null) return null;
+            using var bitmap = decoded.Copy(Bitmap.Config.Argb8888!, true)!;
+            using var canvas = new Canvas(bitmap);
+            var unit = Math.Max(bitmap.Width, bitmap.Height) / 400f;
+
+            if (options.Grid is { IsOff: false } grid && options.Scale is { } scale)
+                DrawGrid(canvas, bitmap.Width, bitmap.Height, session, scale, grid, unit);
+            var revealed = options.Revealed;
+            if (!options.Boxes && (revealed is null || revealed.Count == 0)) return Encode(bitmap);
+            using var box = new Android.Graphics.Paint { AntiAlias = true, StrokeWidth = Math.Max(2f, unit * 1.2f) };
+            box.SetStyle(Android.Graphics.Paint.Style.Stroke);
+            using var text = new Android.Graphics.Paint { AntiAlias = true, TextSize = Math.Max(12f, unit * 7f), FakeBoldText = true, Color = Android.Graphics.Color.Black };
+            using var back = new Android.Graphics.Paint { AntiAlias = true };
+
+            foreach (var c in coins)
+            {
+                if (c.IsManual) continue;   // aggiunta a mano: non ha una posizione nel mosaico
+                if (!options.Boxes && revealed?.Contains(c.Number) != true) continue;
+                var color = c.State switch
+                {
+                    LiveCoinCounter.Sessions.CoinState.Rejected => Android.Graphics.Color.Rgb(150, 150, 150),
+                    LiveCoinCounter.Sessions.CoinState.Corrected => Android.Graphics.Color.Rgb(33, 150, 243),
+                    _ when c.IsUncertain => Android.Graphics.Color.Rgb(255, 152, 0),
+                    _ => Android.Graphics.Color.Rgb(46, 204, 113)
+                };
+                var s = session.PreviewScale;
+                var x = (float)((c.X - session.PreviewOriginX) * s);
+                var y = (float)((c.Y - session.PreviewOriginY) * s);
+                var w = c.Width * s;
+                var h = c.Height * s;
+                box.Color = color;
+                box.StrokeWidth = Math.Max(2f, unit * (options.Selected == c.Number ? 2.6f : 1.2f));
+                canvas.DrawRect(x, y, x + w, y + h, box);
+
+                // il numero corrisponde a «Moneta N» nell'elenco: così si trova sul mosaico la moneta da correggere
+                var value = c.EffectiveCents is { } cents ? (cents >= 100 ? $"{cents / 100}€" : $"{cents}c") : (c.State == LiveCoinCounter.Sessions.CoinState.Rejected ? "✗" : "?");
+                var label = $"#{c.Number} {value}";
+                var width = text.MeasureText(label) + 6;
+                back.Color = color;
+                canvas.DrawRect(x, y - text.TextSize - 4, x + width, y, back);
+                canvas.DrawText(label, x + 3, y - 4, text);
+            }
+
+            // i marker di scala visti: un riquadro azzurro di 20 mm con il loro numero (la posizione è quella sul mosaico)
+            using var markerBox = new Android.Graphics.Paint { AntiAlias = true, StrokeWidth = Math.Max(2f, unit * 1.2f), Color = Android.Graphics.Color.Rgb(0, 200, 255) };
+            markerBox.SetStyle(Android.Graphics.Paint.Style.Stroke);
+            foreach (var m in LiveCoinCounter.Sessions.SessionMarkers.Parse(session.MarkersJson))
+            {
+                var half = (float)(LiveCoinCounter.Mosaic.MarkerSpec.SideMm * m.PxPerMm / 2 * session.PreviewScale);
+                var mx = (float)((m.X - session.PreviewOriginX) * session.PreviewScale);
+                var my = (float)((m.Y - session.PreviewOriginY) * session.PreviewScale);
+                canvas.DrawRect(mx - half, my - half, mx + half, my + half, markerBox);
+                var markerLabel = $"M{m.Id}";
+                back.Color = Android.Graphics.Color.Rgb(0, 200, 255);
+                canvas.DrawRect(mx - half, my - half - text.TextSize - 4, mx - half + text.MeasureText(markerLabel) + 6, my - half, back);
+                canvas.DrawText(markerLabel, mx - half + 3, my - half - 4, text);
+            }
+
+            return Encode(bitmap);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Larghezza e altezza di un'immagine codificata, senza decodificarla tutta.</summary>
+    public static (int Width, int Height) SizeOf(byte[] encoded)
+    {
+        var bounds = new BitmapFactory.Options { InJustDecodeBounds = true };
+        BitmapFactory.DecodeByteArray(encoded, 0, encoded.Length, bounds);
+        return (bounds.OutWidth, bounds.OutHeight);
+    }
+
+    private static byte[] Encode(Bitmap bitmap)
+    {
+        using var output = new MemoryStream();
+        bitmap.Compress(Bitmap.CompressFormat.Jpeg!, 90, output);
+        return output.ToArray();
+    }
+
+    /// <summary>
+    /// Griglia metrica sull'immagine del mosaico a due livelli (righe sottili e righe marcate), ancorata all'origine del
+    /// mosaico; in basso a sinistra la legenda con i passi e l'origine della scala.
+    /// </summary>
+    private static void DrawGrid(Canvas canvas, int width, int height, LiveCoinCounter.Sessions.SessionRecord session,
+        LiveCoinCounter.Sessions.SurfaceScale scale, LiveCoinCounter.Sessions.GridConfig grid, float unit)
+    {
+        void Level(int cm, int alpha, float strokeFactor)
+        {
+            if (cm <= 0) return;
+            var stepMosaic = scale.PxPerMm * 10 * cm;
+            if (stepMosaic * session.PreviewScale < 4) return;      // troppo fitta: sarebbe una macchia
+            using var line = new Android.Graphics.Paint { AntiAlias = true, Color = Android.Graphics.Color.Argb(alpha, 255, 255, 255) };
+            line.SetStyle(Android.Graphics.Paint.Style.Stroke);
+            line.StrokeWidth = Math.Max(1f, unit * strokeFactor);
+
+            // riga k del mosaico → pixel: (k * passoMosaico - origine) * scala dell'anteprima
+            var first = (int)Math.Floor(session.PreviewOriginX / stepMosaic);
+            var last = (int)Math.Ceiling((session.PreviewOriginX + width / session.PreviewScale) / stepMosaic);
+            for (var k = first; k <= last; k++)
+            {
+                var x = (float)((k * stepMosaic - session.PreviewOriginX) * session.PreviewScale);
+                canvas.DrawLine(x, 0, x, height, line);
+            }
+            first = (int)Math.Floor(session.PreviewOriginY / stepMosaic);
+            last = (int)Math.Ceiling((session.PreviewOriginY + height / session.PreviewScale) / stepMosaic);
+            for (var k = first; k <= last; k++)
+            {
+                var y = (float)((k * stepMosaic - session.PreviewOriginY) * session.PreviewScale);
+                canvas.DrawLine(0, y, width, y, line);
+            }
+        }
+
+        Level(grid.MinorCm, 80, 0.3f);
+        Level(grid.MajorCm, 170, 0.55f);
+
+        var label = $"Griglia: {grid.Label} · {scale.Label}";
+        using var text = new Android.Graphics.Paint { AntiAlias = true, TextSize = Math.Max(12f, unit * 6f), Color = Android.Graphics.Color.White };
+        using var back = new Android.Graphics.Paint { Color = Android.Graphics.Color.Argb(150, 0, 0, 0) };
+        var w = text.MeasureText(label);
+        canvas.DrawRect(unit * 2, height - text.TextSize - unit * 6, unit * 2 + w + unit * 4, height - unit * 2, back);
+        canvas.DrawText(label, unit * 4, height - unit * 4, text);
     }
 
     /// <summary>Piccola immagine bianca usata per verificare la connessione a un provider.</summary>

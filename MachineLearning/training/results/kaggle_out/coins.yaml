@@ -1,0 +1,13 @@
+path: /kaggle/working/coins
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: 1 ct
+  1: 2 ct
+  2: 5 ct
+  3: 10 ct
+  4: 20 ct
+  5: 50 ct
+  6: 1 euro
+  7: 2 euro

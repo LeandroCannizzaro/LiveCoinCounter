@@ -35,6 +35,9 @@ public sealed class LabelFile
     public List<CoinLabel> Coins { get; set; } = new();
     public int TotalCents { get; set; }
 
+    /// <summary>Monete coperte di grigio perché senza etichetta sicura (solo per le sessioni dell'app).</summary>
+    public int? Masked { get; set; }
+
     public static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,

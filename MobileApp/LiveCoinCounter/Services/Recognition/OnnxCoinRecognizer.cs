@@ -14,15 +14,9 @@ namespace LiveCoinCounter.Services.Recognition;
 /// </summary>
 public sealed class OnnxCoinRecognizer : ICoinRecognizer
 {
-    private const int DefaultInputSize = 640;
-    private const float ConfidenceThreshold = 0.25f;
-    private const float IouThreshold = 0.6f;
+    internal const float ConfidenceThreshold = 0.25f;
+    internal const float IouThreshold = 0.6f;
     private const bool ClassAgnosticNms = true;   // una moneta non si conta due volte con tagli diversi
-
-    // La sessione costa (caricamento del modello): si tiene solo l'ultima usata, per non occupare memoria con tutti i modelli
-    private static readonly SemaphoreSlim LoadLock = new(1, 1);
-    private static InferenceSession? _session;
-    private static string? _sessionAsset;
 
     private readonly RecognizerProfile _profile;
 
@@ -43,7 +37,7 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
         {
             try
             {
-                var session = await GetSessionAsync(_profile.ModelAsset!, ct);
+                var session = await OnnxModelCache.GetAsync(_profile.ModelAsset!, ct);
                 ct.ThrowIfCancellationRequested();
                 return Recognize(session, imageBytes);
             }
@@ -53,49 +47,16 @@ public sealed class OnnxCoinRecognizer : ICoinRecognizer
             }
             catch (Exception ex)
             {
-                return new CoinRecognitionResult { Success = false, ErrorMessage = $"Errore modello offline: {Describe(ex)}" };
+                return new CoinRecognitionResult { Success = false, ErrorMessage = $"Errore modello offline: {OnnxModelCache.Describe(ex)}" };
             }
         }, ct);
-
-    /// <summary>Il messaggio esterno di un errore di inizializzazione (es. libreria nativa) non dice la causa: si aggiunge la catena delle eccezioni interne.</summary>
-    private static string Describe(Exception ex)
-    {
-        var parts = new List<string>();
-        for (var e = ex; e is not null && parts.Count < 4; e = e.InnerException)
-            parts.Add($"{e.GetType().Name}: {e.Message}");
-        return string.Join(" -> ", parts);
-    }
-
-    private static async Task<InferenceSession> GetSessionAsync(string modelAsset, CancellationToken ct)
-    {
-        await LoadLock.WaitAsync(ct);
-        try
-        {
-            if (_session is null || _sessionAsset != modelAsset)
-            {
-                await using var asset = await FileSystem.OpenAppPackageFileAsync(modelAsset);
-                using var memory = new MemoryStream();
-                await asset.CopyToAsync(memory, ct);
-                var loaded = new InferenceSession(memory.ToArray());
-                _session?.Dispose();
-                _session = loaded;
-                _sessionAsset = modelAsset;
-            }
-            return _session;
-        }
-        finally
-        {
-            LoadLock.Release();
-        }
-    }
 
     private static CoinRecognitionResult Recognize(InferenceSession session, byte[] imageBytes)
     {
         using var source = ImageHelper.DecodeUpright(imageBytes);
 
         var inputName = session.InputMetadata.Keys.First();
-        var dims = session.InputMetadata[inputName].Dimensions;   // [1, 3, altezza, larghezza]
-        var inputSize = dims.Length == 4 && dims[2] > 0 ? dims[2] : DefaultInputSize;
+        var inputSize = OnnxModelCache.InputSize(session);
 
         var letterbox = Letterbox.For(source.Width, source.Height, inputSize);
         var pixels = DrawLetterboxed(source, letterbox, inputSize);

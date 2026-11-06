@@ -1,4 +1,5 @@
 using LiveCoinCounter.Services.Recognition;
+using LiveCoinCounter.Sessions;
 
 namespace LiveCoinCounter.Services;
 
@@ -25,6 +26,82 @@ public static class SettingsService
     {
         get => Preferences.Default.Get(ActiveRecognizerPreference, RecognizerCatalog.DefaultId);
         set => Preferences.Default.Set(ActiveRecognizerPreference, value);
+    }
+
+    // ---- Riconoscimento continuo (issue #6) ----
+
+    /// <summary>Metodo di composizione del mosaico. Predefinito: OpenCV (funziona su tutti i telefoni).</summary>
+    public static CaptureMethod CaptureMethod
+    {
+        get => Enum.TryParse<CaptureMethod>(Preferences.Default.Get("capture_method", nameof(CaptureMethod.OpenCv)), out var v) ? v : CaptureMethod.OpenCv;
+        set => Preferences.Default.Set("capture_method", value.ToString());
+    }
+
+    /// <summary>
+    /// Aspetto della superficie acquisita: piano di colore con solo le monete in foto (predefinito) oppure la foto intera
+    /// del tavolo (utile per controllare le cuciture e il tracking). Il file della foto si salva comunque nella sessione.
+    /// </summary>
+    public static SurfaceLook SurfaceLook
+    {
+        get
+        {
+            if (Preferences.Default.ContainsKey("surface_view"))
+                return Enum.TryParse<SurfaceLook>(Preferences.Default.Get("surface_view", nameof(SurfaceLook.Continuous)), out var v) ? v : SurfaceLook.Continuous;
+            // chi aveva l'interruttore "foto del tavolo" lo ritrova; chi aveva il piano parte dal piano continuo
+            return Preferences.Default.Get("solid_surface", true) ? SurfaceLook.Continuous : SurfaceLook.Photo;
+        }
+        set => Preferences.Default.Set("surface_view", value.ToString());
+    }
+
+    /// <summary>
+    /// Griglia metrica a due livelli: passo fine (righe sottili) e passo principale (righe marcate), ciascuno configurabile o
+    /// spento. Predefinito: nessuna. Serve una scala nota o stimabile. Chi aveva scelto il vecchio passo unico lo ritrova.
+    /// </summary>
+    public static GridConfig Grid
+    {
+        get
+        {
+            if (!Preferences.Default.ContainsKey("grid_minor") && Preferences.Default.ContainsKey("grid_spacing"))
+            {
+                var migrated = GridConfig.FromLegacy(Preferences.Default.Get("grid_spacing", "Off"));
+                Grid = migrated;
+                return migrated;
+            }
+            return new GridConfig(Preferences.Default.Get("grid_minor", 0), Preferences.Default.Get("grid_major", 0)).Normalized();
+        }
+        set
+        {
+            var grid = value.Normalized();
+            Preferences.Default.Set("grid_minor", grid.MinorCm);
+            Preferences.Default.Set("grid_major", grid.MajorCm);
+        }
+    }
+
+    /// <summary>Cosa conservare a fine sessione. Predefinito: mosaico e ritagli.</summary>
+    public static RetentionMode Retention
+    {
+        get => Enum.TryParse<RetentionMode>(Preferences.Default.Get("session_retention", nameof(RetentionMode.MosaicAndCrops)), out var v) ? v : RetentionMode.MosaicAndCrops;
+        set => Preferences.Default.Set("session_retention", value.ToString());
+    }
+
+    /// <summary>Uso dell'AI in rete dopo lo stop. Predefinito: offline, AI su richiesta.</summary>
+    public static AiMode AiMode
+    {
+        get => Enum.TryParse<AiMode>(Preferences.Default.Get("ai_mode", nameof(AiMode.OfflineAiOnRequest)), out var v) ? v : AiMode.OfflineAiOnRequest;
+        set => Preferences.Default.Set("ai_mode", value.ToString());
+    }
+
+    /// <summary>
+    /// Modello sul telefono usato per trovare e riconoscere le monete nelle sessioni: quello scelto come metodo se è un
+    /// modello sul dispositivo, altrimenti il predefinito.
+    /// </summary>
+    public static RecognizerProfile OnDeviceProfile
+    {
+        get
+        {
+            var active = RecognizerCatalog.Get(ActiveRecognizerId);
+            return active.Kind == RecognizerKind.OnDeviceModel ? active : RecognizerCatalog.Get(RecognizerCatalog.DefaultId);
+        }
     }
 
     public static async Task<RecognizerConfig> GetConfigAsync(RecognizerProfile profile)
@@ -77,4 +154,15 @@ public static class SettingsService
         else
             await SecureStorage.Default.SetAsync($"apikey_{id}", key);
     }
+}
+
+/// <summary>Metodo di composizione del mosaico (impostazione "Metodo di composizione").</summary>
+public enum CaptureMethod
+{
+    /// <summary>Punti caratteristici ORB di OpenCV: tutti i telefoni.</summary>
+    OpenCv,
+    /// <summary>Posa della fotocamera e piano del tavolo da ARCore: telefoni certificati, scala in mm.</summary>
+    ArCore,
+    /// <summary>ARCore per la posa, OpenCV per affinare l'allineamento.</summary>
+    Hybrid
 }

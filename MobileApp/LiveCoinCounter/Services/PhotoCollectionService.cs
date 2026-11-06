@@ -31,7 +31,7 @@ public static class PhotoCollectionService
         }
     }
 
-    public static int Count => Directory.GetFiles(Folder, "*.jpg").Length;
+    public static int Count => Directory.GetFiles(Folder, "*.jpg", SearchOption.AllDirectories).Length;
 
     public static string? Save(byte[] image, CoinRecognitionResult result, string methodId)
     {
@@ -49,6 +49,27 @@ public static class PhotoCollectionService
             ["flagged_wrong"] = false
         });
         return id;
+    }
+
+    /// <summary>
+    /// Ritaglio di una moneta corretta a mano in una sessione: un'etichetta pronta per il dataset del classificatore
+    /// (issue #5). Si salva solo con la raccolta attiva; resta sul telefono fino all'esportazione.
+    /// </summary>
+    public static void SaveCoinLabel(byte[] cropJpeg, string sessionId, int number, int? correctCents, int? predictedCents, string? classifierId)
+    {
+        if (!Enabled) return;
+        var folder = Path.Combine(Folder, "coins");
+        Directory.CreateDirectory(folder);
+        var id = $"{sessionId}-{number:D4}";
+        File.WriteAllBytes(Path.Combine(folder, $"{id}.jpg"), cropJpeg);
+        File.WriteAllText(Path.Combine(folder, $"{id}.json"), JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["session"] = sessionId,
+            ["coin"] = number,
+            ["cents"] = correctCents,          // null = non è una moneta
+            ["predicted_cents"] = predictedCents,
+            ["classifier"] = classifierId
+        }, Json));
     }
 
     public static void MarkWrong(string id) => Update(id, info => info["flagged_wrong"] = true);

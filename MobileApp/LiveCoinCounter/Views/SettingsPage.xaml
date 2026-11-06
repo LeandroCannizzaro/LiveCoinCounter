@@ -105,6 +105,75 @@
                 </VerticalStackLayout>
             </Border>
 
+            <!-- Riconoscimento continuo: composizione del mosaico, archivio, AI dopo lo stop -->
+            <Label Text="📷 RICONOSCIMENTO CONTINUO"
+                   FontSize="11"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}"
+                   CharacterSpacing="1" />
+
+            <Border Padding="16"
+                    StrokeThickness="0"
+                    StrokeShape="RoundRectangle 12"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray800}}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Metodo di composizione" FontSize="13" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray800}, Dark=White}" />
+                    <Picker ItemsSource="{Binding CaptureMethods}" SelectedItem="{Binding SelectedCaptureMethod}" FontSize="14"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Label Text="{Binding SelectedCaptureMethod.Description}" FontSize="12" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+
+                    <BoxView HeightRequest="1" Margin="0,6" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+
+                    <Label Text="Superficie acquisita" FontSize="13" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray800}, Dark=White}" />
+                    <Picker ItemsSource="{Binding SurfaceStyles}" SelectedItem="{Binding SelectedSurfaceStyle}" FontSize="14"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Label Text="{Binding SelectedSurfaceStyle.Description}" FontSize="12" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+
+                    <BoxView HeightRequest="1" Margin="0,6" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+
+                    <Label Text="Griglia metrica: passo fine" FontSize="13" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray800}, Dark=White}" />
+                    <Picker ItemsSource="{Binding GridMinorChoices}" SelectedItem="{Binding SelectedGridMinor}" FontSize="14"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Label Text="{Binding SelectedGridMinor.Description}" FontSize="12" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                    <Label Text="Griglia metrica: passo principale" FontSize="13" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray800}, Dark=White}" />
+                    <Picker ItemsSource="{Binding GridMajorChoices}" SelectedItem="{Binding SelectedGridMajor}" FontSize="14"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Label Text="{Binding SelectedGridMajor.Description}" FontSize="12" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                    <Label Text="{Binding GridSummary}" FontSize="12" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                    <Label Text="{Binding GridNote}" FontSize="11" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+
+                    <BoxView HeightRequest="1" Margin="0,6" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+
+                    <Label Text="Archivio delle sessioni" FontSize="13" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray800}, Dark=White}" />
+                    <Picker ItemsSource="{Binding RetentionModes}" SelectedItem="{Binding SelectedRetention}" FontSize="14"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Label Text="{Binding SelectedRetention.Description}" FontSize="12" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+
+                    <BoxView HeightRequest="1" Margin="0,6" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+
+                    <Label Text="Riconoscimento dopo lo stop" FontSize="13" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray800}, Dark=White}" />
+                    <Picker ItemsSource="{Binding AiModes}" SelectedItem="{Binding SelectedAiMode}" FontSize="14"
+                            TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                    <Label Text="{Binding SelectedAiMode.Description}" FontSize="12" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray300}}" />
+                    <Label Text="{Binding AiPrivacyNote}" FontSize="11" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+                </VerticalStackLayout>
+            </Border>
+
             <!-- Raccolta facoltativa di foto per migliorare il modello -->
             <Label Text="🧪 MIGLIORA IL RICONOSCIMENTO"
                    FontSize="11" FontAttributes="Bold" Margin="20,12,20,4"
