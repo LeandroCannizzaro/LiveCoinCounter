@@ -162,14 +162,10 @@
             </Grid>
 
             <!-- La superficie, pulita -->
-            <Border IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" BackgroundColor="#121214">
-                <Image Source="{Binding MosaicImage}" Aspect="AspectFit">
-                    <Image.GestureRecognizers>
-                        <TapGestureRecognizer Command="{Binding OpenSurfaceCommand}" />
-                        <SwipeGestureRecognizer Direction="Left" Swiped="OnSwiped" />
-                        <SwipeGestureRecognizer Direction="Right" Swiped="OnSwiped" />
-                    </Image.GestureRecognizers>
-                </Image>
+            <!-- Altezza fissa (vedi il code-behind): cambiando superficie la pagina non si sposta. Tocco e swipe li gestisce il
+                 code-behind, così il trascinamento verticale resta allo scorrimento della pagina. -->
+            <Border x:Name="SurfaceFrame" IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" BackgroundColor="#121214">
+                <Image x:Name="SurfaceImage" Source="{Binding MosaicImage}" Aspect="AspectFit" />
             </Border>
 
             <Button IsVisible="{Binding IsShots}" Text="📷 Altro scatto" Command="{Binding AnotherShotCommand}" CornerRadius="12"
