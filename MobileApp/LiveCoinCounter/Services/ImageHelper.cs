@@ -121,7 +121,9 @@ public static class ImageHelper
         SurfaceRender? options = null)
     {
         options ??= new SurfaceRender();
-        var path = options.Photo && File.Exists(SessionStorage.MosaicPhotoPath(session.Id)) ? SessionStorage.MosaicPhotoPath(session.Id) : session.MosaicPreviewPath;
+        var wanted = SessionStorage.MosaicPathFor(session.Id, options.View);
+        // le sessioni vecchie hanno solo il mosaico unico: si usa quello
+        var path = File.Exists(wanted) ? wanted : session.MosaicPreviewPath;
         if (path is null || !File.Exists(path)) return null;
         try
         {
@@ -131,8 +133,8 @@ public static class ImageHelper
             using var canvas = new Canvas(bitmap);
             var unit = Math.Max(bitmap.Width, bitmap.Height) / 400f;
 
-            if (options.Grid != LiveCoinCounter.Sessions.GridSpacing.Off && options.Scale is { } scale)
-                DrawGrid(canvas, bitmap.Width, bitmap.Height, session, scale, (int)options.Grid, unit);
+            if (options.Grid is { IsOff: false } grid && options.Scale is { } scale)
+                DrawGrid(canvas, bitmap.Width, bitmap.Height, session, scale, grid, unit);
             if (!options.Boxes) return Encode(bitmap);
             using var box = new Android.Graphics.Paint { AntiAlias = true, StrokeWidth = Math.Max(2f, unit * 1.2f) };
             box.SetStyle(Android.Graphics.Paint.Style.Stroke);
@@ -182,40 +184,42 @@ public static class ImageHelper
     }
 
     /// <summary>
-    /// Griglia metrica sull'immagine del mosaico: ancorata all'origine del mosaico, una riga ogni <paramref name="cm"/> cm,
-    /// più marcata ogni 5 righe (1 e 2 cm) o 2 (5 cm); in basso a sinistra la legenda con l'origine della scala.
+    /// Griglia metrica sull'immagine del mosaico a due livelli (righe sottili e righe marcate), ancorata all'origine del
+    /// mosaico; in basso a sinistra la legenda con i passi e l'origine della scala.
     /// </summary>
     private static void DrawGrid(Canvas canvas, int width, int height, LiveCoinCounter.Sessions.SessionRecord session,
-        LiveCoinCounter.Sessions.SurfaceScale scale, int cm, float unit)
+        LiveCoinCounter.Sessions.SurfaceScale scale, LiveCoinCounter.Sessions.GridConfig grid, float unit)
     {
-        var step = scale.PxPerMm * 10 * cm * session.PreviewScale;      // pixel dell'immagine per riga
-        if (step < 4) return;
-        var major = cm switch { 1 => 5, 2 => 5, 5 => 2, _ => 1 };
-        using var line = new Android.Graphics.Paint { AntiAlias = true };
-        line.SetStyle(Android.Graphics.Paint.Style.Stroke);
-
-        // riga k del mosaico → pixel: (k * passoMosaico - origine) * scala dell'anteprima
-        var stepMosaic = scale.PxPerMm * 10 * cm;
-        var first = (int)Math.Floor(session.PreviewOriginX / stepMosaic);
-        var last = (int)Math.Ceiling((session.PreviewOriginX + width / session.PreviewScale) / stepMosaic);
-        for (var k = first; k <= last; k++)
+        void Level(int cm, int alpha, float strokeFactor)
         {
-            var x = (float)((k * stepMosaic - session.PreviewOriginX) * session.PreviewScale);
-            line.Color = Android.Graphics.Color.Argb(k % major == 0 ? 170 : 80, 255, 255, 255);
-            line.StrokeWidth = Math.Max(1f, unit * (k % major == 0 ? 0.55f : 0.3f));
-            canvas.DrawLine(x, 0, x, height, line);
-        }
-        first = (int)Math.Floor(session.PreviewOriginY / stepMosaic);
-        last = (int)Math.Ceiling((session.PreviewOriginY + height / session.PreviewScale) / stepMosaic);
-        for (var k = first; k <= last; k++)
-        {
-            var y = (float)((k * stepMosaic - session.PreviewOriginY) * session.PreviewScale);
-            line.Color = Android.Graphics.Color.Argb(k % major == 0 ? 170 : 80, 255, 255, 255);
-            line.StrokeWidth = Math.Max(1f, unit * (k % major == 0 ? 0.55f : 0.3f));
-            canvas.DrawLine(0, y, width, y, line);
+            if (cm <= 0) return;
+            var stepMosaic = scale.PxPerMm * 10 * cm;
+            if (stepMosaic * session.PreviewScale < 4) return;      // troppo fitta: sarebbe una macchia
+            using var line = new Android.Graphics.Paint { AntiAlias = true, Color = Android.Graphics.Color.Argb(alpha, 255, 255, 255) };
+            line.SetStyle(Android.Graphics.Paint.Style.Stroke);
+            line.StrokeWidth = Math.Max(1f, unit * strokeFactor);
+
+            // riga k del mosaico → pixel: (k * passoMosaico - origine) * scala dell'anteprima
+            var first = (int)Math.Floor(session.PreviewOriginX / stepMosaic);
+            var last = (int)Math.Ceiling((session.PreviewOriginX + width / session.PreviewScale) / stepMosaic);
+            for (var k = first; k <= last; k++)
+            {
+                var x = (float)((k * stepMosaic - session.PreviewOriginX) * session.PreviewScale);
+                canvas.DrawLine(x, 0, x, height, line);
+            }
+            first = (int)Math.Floor(session.PreviewOriginY / stepMosaic);
+            last = (int)Math.Ceiling((session.PreviewOriginY + height / session.PreviewScale) / stepMosaic);
+            for (var k = first; k <= last; k++)
+            {
+                var y = (float)((k * stepMosaic - session.PreviewOriginY) * session.PreviewScale);
+                canvas.DrawLine(0, y, width, y, line);
+            }
         }
 
-        var label = $"Griglia {cm} cm · {scale.Label}";
+        Level(grid.MinorCm, 80, 0.3f);
+        Level(grid.MajorCm, 170, 0.55f);
+
+        var label = $"Griglia: {grid.Label} · {scale.Label}";
         using var text = new Android.Graphics.Paint { AntiAlias = true, TextSize = Math.Max(12f, unit * 6f), Color = Android.Graphics.Color.White };
         using var back = new Android.Graphics.Paint { Color = Android.Graphics.Color.Argb(150, 0, 0, 0) };
         var w = text.MeasureText(label);

@@ -19,7 +19,17 @@ public enum TrackStatus
 /// <param name="Sharpness">Varianza del laplaciano sul fotogramma ridotto.</param>
 /// <param name="PxPerMm">Scala del mosaico in pixel per millimetro, se nota (ARCore).</param>
 public sealed record TrackResult(TrackStatus Status, Homography? FrameToMosaic, double Sharpness, string? Hint = null,
-    int Inliers = 0, double? PxPerMm = null, TrackDetail? Detail = null);
+    int Inliers = 0, double? PxPerMm = null, TrackDetail? Detail = null, PoseEstimate? Estimate = null);
+
+/// <summary>
+/// Dove si trova (a stima) il telefono quando il fotogramma non si aggancia a nessun riferimento: si segue il movimento
+/// da un frame al successivo (odometria) a partire dall'ultima posizione affidabile. Non entra mai nel mosaico: serve a
+/// guidare l'utente e a scegliere meglio i riferimenti con cui riagganciarsi.
+/// </summary>
+/// <param name="FrameToMosaic">Posa stimata del fotogramma.</param>
+/// <param name="ToLastReliable">Vettore, nel mosaico, dal centro stimato dell'inquadratura al centro dell'ultimo fotogramma agganciato.</param>
+/// <param name="Tracked">Vero se il movimento è stato misurato su questo fotogramma, falso se la posizione è solo mantenuta.</param>
+public sealed record PoseEstimate(Homography FrameToMosaic, PointD ToLastReliable, bool Tracked);
 
 /// <summary>Un tentativo di agganciare il fotogramma a un fotogramma chiave. <see cref="Outcome"/>: ok, few_matches, ransac_failed, low_ratio, not_better o implausible:motivo.</summary>
 public sealed record CandidateAttempt(int Keyframe, int Matches, int Inliers, double InlierRatio, string Outcome);
@@ -88,6 +98,15 @@ public sealed record FeatureTrackerOptions
     /// <summary>Oltre questo numero si scartano i fotogrammi di aggancio più vecchi (quelli chiave restano).</summary>
     public int MaxAnchors { get; init; } = 120;
 
+    /// <summary>Frazione minima di inlier per il confronto guidato (0,2 è troppo severa: ammette più falsi, e conta il numero).</summary>
+    public double GuidedMinInlierRatio { get; init; } = 0.08;
+
+    /// <summary>Inlier minimi per accettare un aggancio guidato col frame precedente.</summary>
+    public int MinGuidedInliers { get; init; } = 25;
+
+    /// <summary>Inlier minimi per misurare il movimento da persi (odometria): più bassi, la stima non entra nel mosaico.</summary>
+    public int MinOdometryInliers { get; init; } = 12;
+
     /// <summary>Raggio di ricerca dell'accoppiamento guidato col frame precedente, in frazione del lato maggiore (0,18 = 115 px su 640).</summary>
     public double GuidedRadius { get; init; } = 0.18;
 
@@ -115,6 +134,10 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
 
     /// <summary>L'ultimo fotogramma collocato (con qualsiasi riferimento): primo candidato per il fotogramma successivo.</summary>
     private Keyframe? _previous;
+
+    /// <summary>Durante la perdita: l'ultimo fotogramma di cui si è misurato il movimento, con la posa stimata.</summary>
+    private Keyframe? _odometry;
+    private Homography? _odometryPose;
 
     public FeatureMosaicTracker(IFeatureExtractor extractor, FeatureTrackerOptions? options = null)
     {
@@ -149,12 +172,15 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
 
             var initial = prior ?? Initial(frame);
             _last = initial;
+            var firstCenter = new PointD(frame.Image.Width / 2.0, frame.Image.Height / 2.0);
+            _previous = new Keyframe(features, scale, initial, Map(initial, firstCenter), initial.AreaScaleAt(firstCenter.X, firstCenter.Y));
             return new TrackResult(TrackStatus.Tracking, initial, sharpness, Inliers: features.Count,
                 Detail: new TrackDetail(Id, features.Count, 0, 0, false, Array.Empty<CandidateAttempt>(), "first_frame"));
         }
 
         var center = new PointD(frame.Image.Width / 2.0, frame.Image.Height / 2.0);
-        var predicted = prior ?? _last;
+        // da persi i riferimenti da provare sono quelli vicini a dove si crede di essere ora, non all'ultima posizione nota
+        var predicted = prior ?? _odometryPose ?? _last;
         var predictedCenter = predicted is { } p ? Map(p, center) : _keyframes[^1].Center;
 
         var ordered = _keyframes.OrderBy(k => k.Center.DistanceTo(predictedCenter)).ToList();
@@ -185,7 +211,9 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
                 attempts.Add(new CandidateAttempt(index, matches.Count, 0, 0, matches.Count < _options.MinInliers ? "few_matches" : "ransac_failed"));
                 return false;
             }
-            if (ransac.InlierRatio < _options.MinInlierRatio)
+            // l'accoppiamento guidato ammette più falsi (nella prova: 35 inlier su 176 = 20%): conta il numero, non la frazione
+            var minRatio = isPrevious ? _options.GuidedMinInlierRatio : _options.MinInlierRatio;
+            if (ransac.InlierRatio < minRatio || (isPrevious && ransac.Inliers < _options.MinGuidedInliers))
             {
                 attempts.Add(new CandidateAttempt(index, matches.Count, ransac.Inliers, ransac.InlierRatio, "low_ratio"));
                 return false;
@@ -227,9 +255,11 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
         {
             _lostFrames++;
             var lost = _lostFrames >= _options.LostAfter;
+            var estimate = EstimateByOdometry(features, scale, gray.Width, gray.Height, frame.Image.Width, frame.Image.Height);
             return new TrackResult(lost ? TrackStatus.Lost : TrackStatus.Tracking, null, sharpness,
                 lost ? "Posizione persa: torna dove vedi il riquadro arancione, oppure tocca ↻ per ricominciare" : null,
-                Detail: new TrackDetail(Id, features.Count, _keyframes.Count, _lostFrames, relocalizing, attempts, "not_placed", Timings: timings));
+                Detail: new TrackDetail(Id, features.Count, _keyframes.Count, _lostFrames, relocalizing, attempts, "not_placed", Timings: timings),
+                Estimate: estimate);
         }
 
         // Si sceglie l'aggancio con più inlier; ma un riferimento fisso (chiave o aggancio) con inlier comparabili vince sul
@@ -244,6 +274,8 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
         }
 
         _lostFrames = 0;
+        _odometry = null;          // riagganciati: la stima per odometria non serve più
+        _odometryPose = null;
         _last = chosen.H;
         _previous = new Keyframe(features, scale, chosen.H, Map(chosen.H, center), chosen.H.AreaScaleAt(center.X, center.Y));
         _framesSinceAnchor++;
@@ -251,6 +283,44 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
         return new TrackResult(TrackStatus.Tracking, chosen.H, sharpness, Inliers: chosen.Inliers,
             Detail: new TrackDetail(Id, features.Count, _keyframes.Count, 0, relocalizing, attempts, "placed",
                 Anchors: _keyframes.Count(k => k.IsAnchor), AnchorAdded: anchored, Timings: timings));
+    }
+
+    /// <summary>
+    /// Da persi: il movimento si misura rispetto all'ultimo fotogramma che si è riusciti a seguire (guidato, soglie più
+    /// basse), partendo dall'ultima posizione affidabile. Un fotogramma che non si lascia misurare mantiene la posizione
+    /// (nessun movimento supposto) e il successivo si confronta ancora con l'ultimo buono.
+    /// </summary>
+    private PoseEstimate? EstimateByOdometry(FeatureSet features, float scale, int grayWidth, int grayHeight, int width, int height)
+    {
+        if (_previous is null) return null;
+        var reference = _odometry ?? _previous;
+
+        var radius = (float)(_options.GuidedRadius * Math.Max(grayWidth, grayHeight));
+        var matches = FeatureMatcher.MatchNear(features, reference.Features, radius);
+        var ransac = HomographyRansac.Estimate(matches, _options.RansacThreshold, minInliers: _options.MinOdometryInliers);
+
+        var pose = reference.FrameToMosaic;
+        var tracked = false;
+        if (ransac is not null && ransac.InlierRatio >= _options.GuidedMinInlierRatio)
+        {
+            var frameToReference = Homography.Scale(1 / reference.GrayScale) * ransac.Homography * Homography.Scale(scale);
+            var candidate = reference.FrameToMosaic * frameToReference;
+            if (Implausible(candidate, width, height, reference.AreaScale) is null)
+            {
+                pose = candidate;
+                tracked = true;
+            }
+        }
+
+        var center = new PointD(width / 2.0, height / 2.0);
+        // ogni fotogramma perso diventa il riferimento del successivo (con la posa mantenuta se non si è riusciti a misurarlo):
+        // il frame seguente è quasi sempre simile a quello appena prima, anche quando entrambi sono lontani da ogni riferimento noto
+        _odometry = new Keyframe(features, scale, pose, Map(pose, center), pose.AreaScaleAt(center.X, center.Y));
+        _odometryPose = pose;
+
+        var here = Map(pose, center);
+        var target = _previous.Center;
+        return new PoseEstimate(pose, new PointD(target.X - here.X, target.Y - here.Y), tracked);
     }
 
     /// <summary>

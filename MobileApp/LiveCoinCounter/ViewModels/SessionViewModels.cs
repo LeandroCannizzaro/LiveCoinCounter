@@ -271,7 +271,7 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
         var session = _session;
         var coins = _coins;
-        var options = new SurfaceRender(Boxes: true, Grid: SettingsService.GridSpacing, Scale: SessionServices.ScaleOf(session, coins));
+        var options = new SurfaceRender(View: SettingsService.SurfaceLook, Boxes: true, Grid: SettingsService.Grid, Scale: SessionServices.ScaleOf(session, coins));
         var annotated = await Task.Run(() => ImageHelper.DrawSessionMosaic(session, coins, options));
         MosaicImage = annotated is null ? null : ImageSource.FromStream(() => new MemoryStream(annotated));
 

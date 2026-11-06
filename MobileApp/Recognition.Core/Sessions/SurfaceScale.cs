@@ -21,12 +21,55 @@ public sealed record SurfaceScale(double PxPerMm, bool Measured)
         From(knownPxPerMm, tracks.Where(t => t.DetectorCents is not null).Select(t => (t.MosaicBox.Diameter, t.DetectorCents!.Value, t.DetectorClassConfidence)));
 }
 
-/// <summary>La spaziatura della griglia metrica (impostazione "Griglia metrica").</summary>
-public enum GridSpacing
+/// <summary>Come si mostra la superficie acquisita (impostazione "Superficie acquisita").</summary>
+public enum SurfaceLook
 {
-    Off = 0,
-    Cm1 = 1,
-    Cm2 = 2,
-    Cm5 = 5,
-    Cm10 = 10
+    /// <summary>Un piano grigio ardesia continuo e pieno con sopra solo le monete (predefinito).</summary>
+    Continuous,
+    /// <summary>Il piano solo dove ci sono i fotogrammi acquisiti: si vede quanto e come è stato coperto.</summary>
+    Frames,
+    /// <summary>La foto reale del tavolo.</summary>
+    Photo
+}
+
+/// <summary>
+/// La griglia metrica a due livelli (impostazioni "Griglia: passo fine" e "Griglia: passo principale"): righe sottili ogni
+/// <see cref="MinorCm"/> cm e righe marcate ogni <see cref="MajorCm"/> cm. 0 = quel livello è spento.
+/// </summary>
+public sealed record GridConfig(int MinorCm, int MajorCm)
+{
+    public static readonly int[] MinorChoices = { 0, 1, 2, 5 };
+    public static readonly int[] MajorChoices = { 0, 5, 10, 20, 50 };
+
+    public static GridConfig Off { get; } = new(0, 0);
+
+    public bool IsOff => MinorCm <= 0 && MajorCm <= 0;
+
+    /// <summary>
+    /// Valori validi: non negativi, e il passo principale non più fine del passo fine. Le righe dei due livelli si disegnano
+    /// ciascuna sui propri multipli (con 2 cm e 5 cm una riga ogni 10 cm coincide con entrambi).
+    /// </summary>
+    public GridConfig Normalized()
+    {
+        var minor = Math.Max(0, MinorCm);
+        var major = Math.Max(0, MajorCm);
+        if (minor > 0 && major > 0 && major < minor) major = minor;
+        return new GridConfig(minor, major);
+    }
+
+    /// <summary>La descrizione per la legenda.</summary>
+    public string Label => IsOff ? "senza griglia"
+        : MinorCm > 0 && MajorCm > 0 ? $"righe ogni {MinorCm} cm, marcate ogni {MajorCm} cm"
+        : MinorCm > 0 ? $"righe ogni {MinorCm} cm"
+        : $"righe ogni {MajorCm} cm";
+
+    /// <summary>Dalle vecchie impostazioni a un solo livello (1, 2, 5, 10 cm).</summary>
+    public static GridConfig FromLegacy(string? legacy) => legacy switch
+    {
+        "Cm1" => new GridConfig(1, 5),
+        "Cm2" => new GridConfig(2, 10),
+        "Cm5" => new GridConfig(5, 10),
+        "Cm10" => new GridConfig(0, 10),
+        _ => Off
+    };
 }

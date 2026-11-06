@@ -142,6 +142,37 @@ public class MosaicTests
     }
 
     [Fact]
+    public void When_lost_the_tracker_keeps_measuring_the_movement_and_points_back_to_the_last_good_position()
+    {
+        var scene = new SyntheticScene(3000, 1000, seed: 33);
+        var tracker = new FeatureMosaicTracker(new OrbLite(), new FeatureTrackerOptions { MosaicScale = 1, LostAfter = 2 });
+        var start = SyntheticScene.View(400, 400, W, H);
+        var first = tracker.Process(new CameraFrame(scene.Render(start, W, H), 0, 0));
+        tracker.CommitKeyframe(first.FrameToMosaic!.Value);
+
+        // il telefono salta lontano (nessuna zona in comune col fotogramma agganciato) e poi si sposta di 40 px a frame
+        TrackResult? previous = null, current = null;
+        for (var i = 0; i < 4; i++)
+        {
+            var view = SyntheticScene.View(1900 + i * 40, 400, W, H);
+            current = tracker.Process(new CameraFrame(scene.Render(view, W, H), i + 1, 0));
+            Assert.Null(current.FrameToMosaic);                       // da persi non si colloca nulla nel mosaico
+            Assert.NotNull(current.Estimate);
+            if (previous?.Estimate is { } before && i >= 2)
+            {
+                Assert.True(current.Estimate!.Tracked, "il movimento tra frame vicini va misurato");
+                var (bx, _) = before.FrameToMosaic.Apply(W / 2.0, H / 2.0);
+                var (cx, _) = current.Estimate.FrameToMosaic.Apply(W / 2.0, H / 2.0);
+                Assert.InRange(cx - bx, 30, 50);                      // 40 px di spostamento a destra
+            }
+            previous = current;
+        }
+
+        // la freccia punta indietro, verso il fotogramma agganciato (a sinistra della posizione stimata)
+        Assert.True(current!.Estimate!.ToLastReliable.X < 0, $"vettore di ritorno: ({current.Estimate.ToLastReliable.X:0}, {current.Estimate.ToLastReliable.Y:0})");
+    }
+
+    [Fact]
     public void Tracker_reports_lost_on_unrelated_image_and_relocalizes()
     {
         var scene = new SyntheticScene(1200, 900, seed: 9);
@@ -211,6 +242,18 @@ public class MosaicTests
         Assert.Equal(plane, At(20, 20));       // fuori: il piano
         Assert.Equal(plane, At(101, 51));      // angolo del riquadro, fuori dal cerchio
         Assert.Equal(photo, canvas.Render(4096, out _, out _)![130 - (int)origin.X, 80 - (int)origin.Y]);   // senza stile resta la foto
+
+        // superficie continua: il bordo della zona acquisita sparisce, tutto il rettangolo è piano (e le monete restano foto)
+        var narrow = new MosaicCanvas();
+        narrow.Compose(new ArgbImage(100, 100, Enumerable.Repeat(photo, 10000).ToArray()), Homography.Translation(0, 0), 1f);
+        narrow.Compose(new ArgbImage(100, 100, Enumerable.Repeat(photo, 10000).ToArray()), Homography.Translation(150, 130), 1f);
+        var continuous = narrow.Render(4096, out _, out var o2, plane, new[] { new RectF(10, 10, 20, 20) }, fillGaps: true)!;
+        var jagged = narrow.Render(4096, out _, out _, plane, new[] { new RectF(10, 10, 20, 20) }, fillGaps: false)!;
+        int Px(ArgbImage image, int x, int y) => image[(int)(x - o2.X), (int)(y - o2.Y)];
+        Assert.Equal(photo, Px(continuous, 20, 20));                           // la moneta resta in foto
+        Assert.Equal(plane, Px(continuous, 60, 60));                           // zona acquisita fuori dalla moneta: piano
+        Assert.Equal(plane, Px(continuous, 180, 20));                          // zona non acquisita dentro il rettangolo: piano, non nero
+        Assert.Equal(ImageOps.Argb(0, 0, 0), Px(jagged, 180, 20));             // senza riempimento (vista «frame acquisiti») resta nero
 
         var tile = canvas.SnapshotSurface(null, plane, coins).Single(t => t.Key == new TileKey(0, 0)).Pixels;
         Assert.Equal(photo, tile[80 * MosaicCanvas.TileSize + 130]);

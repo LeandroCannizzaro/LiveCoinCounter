@@ -41,6 +41,33 @@ public class CoinRegistryTests
         Assert.Equal(usable, DetectionFilter.IsUsable(new RectF(x, y, w, h), 640, 480));
 }
 
+public class GridConfigTests
+{
+    [Theory]
+    [InlineData(1, 5, 1, 5)]
+    [InlineData(2, 5, 2, 5)]
+    [InlineData(5, 5, 5, 5)]
+    [InlineData(5, 10, 5, 10)]
+    [InlineData(5, 0, 5, 0)]       // solo righe fini
+    [InlineData(0, 10, 0, 10)]     // solo righe principali
+    [InlineData(5, 2, 5, 5)]       // il principale non può essere più fine del fine
+    [InlineData(-1, -3, 0, 0)]
+    public void Grid_levels_are_normalized(int minor, int major, int expectedMinor, int expectedMajor)
+    {
+        var grid = new GridConfig(minor, major).Normalized();
+        Assert.Equal((expectedMinor, expectedMajor), (grid.MinorCm, grid.MajorCm));
+    }
+
+    [Fact]
+    public void Old_single_level_setting_becomes_two_levels()
+    {
+        Assert.Equal(new GridConfig(1, 5), GridConfig.FromLegacy("Cm1"));
+        Assert.Equal(new GridConfig(0, 10), GridConfig.FromLegacy("Cm10"));
+        Assert.True(GridConfig.FromLegacy("Off").IsOff);
+        Assert.True(GridConfig.FromLegacy(null).IsOff);
+    }
+}
+
 public class ColorCheckTests
 {
     private static CoinClassification Read(int cents, float conf, params (int, float)[] topK) =>

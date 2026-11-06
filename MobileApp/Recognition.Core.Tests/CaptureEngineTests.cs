@@ -84,6 +84,25 @@ public class CaptureEngineTests
         Assert.Contains("riquadro arancione", lost.Hint);
     }
 
+    [Theory]
+    [InlineData(100, 0, 90, "a destra")]
+    [InlineData(-100, 0, 270, "a sinistra")]
+    [InlineData(0, -100, 0, "in alto")]
+    [InlineData(0, 100, 180, "in basso")]
+    [InlineData(70, -70, 45, "in alto a destra")]
+    public void Recovery_guidance_points_the_way_back_in_screen_directions(double vx, double vy, double degrees, string words)
+    {
+        // telefono non girato rispetto all'inizio: il primo fotogramma ha l'angolo A→B a 90°
+        var estimate = new PoseEstimate(Homography.Rotation(90), new PointD(vx, vy), Tracked: true);
+
+        var guidance = RecoveryGuidance.From(estimate, 640, 480)!;
+
+        Assert.InRange(guidance.ArrowDegrees, degrees - 1, degrees + 1);
+        Assert.Equal(words, guidance.DirectionWords);
+        Assert.InRange(guidance.DistancePx, Math.Sqrt(vx * vx + vy * vy) - 0.01, Math.Sqrt(vx * vx + vy * vy) + 0.01);
+        Assert.Equal(480, guidance.FrameSidePx, 1);
+    }
+
     [Fact]
     public async Task Dark_frames_suggest_the_torch()
     {

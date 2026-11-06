@@ -45,9 +45,10 @@
                     </VerticalStackLayout>
                     <Switch Grid.Column="1" IsToggled="{Binding ShowGrid}" IsEnabled="{Binding CanGrid}" />
                 </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding HasPhoto}">
-                    <Label Text="Foto reale del tavolo" TextColor="White" FontSize="14" VerticalOptions="Center" />
-                    <Switch Grid.Column="1" IsToggled="{Binding ShowPhoto}" />
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <Label Text="Vista" TextColor="White" FontSize="14" VerticalOptions="Center" />
+                    <Picker Grid.Column="1" ItemsSource="{Binding Views}" SelectedItem="{Binding SelectedView}" FontSize="14" TextColor="White"
+                            TitleColor="#99FFFFFF" HorizontalOptions="Fill" />
                 </Grid>
             </VerticalStackLayout>
         </Border>

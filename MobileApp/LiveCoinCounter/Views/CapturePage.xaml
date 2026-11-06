@@ -67,6 +67,17 @@
                 FontSize="24" TextColor="White" BackgroundColor="#55000000" BorderColor="#88FFFFFF" BorderWidth="1"
                 SemanticProperties.Description="Salva la parte acquisita e ricomincia" />
 
+        <!-- Posizione persa: la freccia dice dove spostare il telefono per tornare nella zona già ripresa (si aggiorna mentre ti muovi) -->
+        <Border IsVisible="{Binding HasRecovery}" VerticalOptions="Center" HorizontalOptions="Center" Margin="24,0"
+                Padding="24,18" StrokeThickness="0" StrokeShape="RoundRectangle 26" BackgroundColor="#B3000000" InputTransparent="True">
+            <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
+                <Label Text="▲" FontSize="84" TextColor="#FF9800" HorizontalOptions="Center"
+                       Rotation="{Binding ArrowRotation}" SemanticProperties.Description="Direzione in cui spostare il telefono" />
+                <Label Text="{Binding RecoveryText}" TextColor="White" FontSize="16" FontAttributes="Bold"
+                       HorizontalTextAlignment="Center" LineBreakMode="WordWrap" MaximumWidthRequest="300" />
+            </VerticalStackLayout>
+        </Border>
+
         <!-- Torcia: con poca luce l'immagine si sfoca (solo durante l'acquisizione, se il telefono ce l'ha) -->
         <Button Text="{Binding TorchSymbol}"
                 Command="{Binding ToggleTorchCommand}"

@@ -49,7 +49,57 @@ public sealed record CaptureOptions
 /// collocato: quando il tracking è perso indica all'operatore dove tornare.
 /// </summary>
 public sealed record TrackingUpdate(TrackStatus Status, string? Hint, Quad? FrameQuad, int Keyframes, int PendingDetections, bool MosaicFull,
-    Quad? LastKnownQuad = null, bool Blurry = false, bool Dark = false);
+    Quad? LastKnownQuad = null, bool Blurry = false, bool Dark = false, RecoveryGuidance? Recovery = null, Quad? EstimatedQuad = null);
+
+/// <summary>
+/// Come muovere il telefono per tornare dove il tracking era agganciato, quando si è perso.
+/// </summary>
+/// <param name="ScreenX">Direzione verso cui spostare il telefono, nei versi dello schermo (X a destra, Y in basso, lunghezza 1).</param>
+/// <param name="DistancePx">Distanza stimata nel mosaico, in pixel del mosaico.</param>
+/// <param name="FrameSidePx">Lato minore dell'inquadratura nel mosaico: serve a esprimere la distanza in "inquadrature".</param>
+/// <param name="Tracked">La stima segue davvero il movimento (altrimenti è solo mantenuta e meno affidabile).</param>
+public sealed record RecoveryGuidance(double ScreenX, double ScreenY, double DistancePx, double FrameSidePx, bool Tracked)
+{
+    /// <summary>Angolo della freccia in gradi, in senso orario a partire da "in alto" (0 = su, 90 = destra, 180 = giù, 270 = sinistra).</summary>
+    public double ArrowDegrees => (Math.Atan2(ScreenX, -ScreenY) * 180 / Math.PI + 360) % 360;
+
+    /// <summary>La distanza in inquadrature (1 = quanto è larga l'inquadratura).</summary>
+    public double DistanceInFrames => FrameSidePx <= 0 ? 0 : DistancePx / FrameSidePx;
+
+    /// <summary>"a destra", "in alto a sinistra", "indietro"... in base all'angolo.</summary>
+    public string DirectionWords => ArrowDegrees switch
+    {
+        < 22.5 or >= 337.5 => "in alto",
+        < 67.5 => "in alto a destra",
+        < 112.5 => "a destra",
+        < 157.5 => "in basso a destra",
+        < 202.5 => "in basso",
+        < 247.5 => "in basso a sinistra",
+        < 292.5 => "a sinistra",
+        _ => "in alto a sinistra"
+    };
+
+    /// <summary>
+    /// Dal vettore di ritorno nel mosaico (<paramref name="toLastReliable"/>) alla guida sullo schermo: il mosaico ha gli assi
+    /// dell'inizio, quindi si ruota il vettore dell'angolo di cui il telefono è girato rispetto ad allora.
+    /// </summary>
+    public static RecoveryGuidance? From(PoseEstimate estimate, int frameWidth, int frameHeight)
+    {
+        var quad = estimate.FrameToMosaic.MapRect(frameWidth, frameHeight);
+        var vx = estimate.ToLastReliable.X;
+        var vy = estimate.ToLastReliable.Y;
+        var distance = Math.Sqrt(vx * vx + vy * vy);
+        if (distance < 1e-6) return null;
+
+        // all'inizio il lato A→B dell'inquadratura punta a 90° nel mosaico; la differenza è la rotazione del telefono
+        var angle = Math.Atan2(quad.B.Y - quad.A.Y, quad.B.X - quad.A.X) - Math.PI / 2;
+        double cos = Math.Cos(-angle), sin = Math.Sin(-angle);
+        var sx = (vx * cos - vy * sin) / distance;
+        var sy = (vx * sin + vy * cos) / distance;
+        var side = Math.Min(quad.A.DistanceTo(quad.B), quad.A.DistanceTo(quad.D));
+        return new RecoveryGuidance(sx, sy, distance, side, estimate.Tracked);
+    }
+}
 
 /// <summary>Una moneta da salvare: <see cref="Crop"/> è valorizzato quando c'è un ritaglio nuovo o migliore.</summary>
 public sealed record CoinChange(CoinTrack Track, bool IsNew, ArgbImage? Crop, CoinColor? Color = null);
@@ -264,7 +314,10 @@ public sealed class CaptureEngine
         else if (hint is null && blurry) hint = "Immagine sfocata: allontana il telefono (25–40 cm) e tienilo fermo";
 
         if (Canvas.IsFull) hint = "Superficie massima raggiunta: ferma l'acquisizione";
-        TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad, blurry, dark));
+        var recovery = result.Estimate is { } estimate ? RecoveryGuidance.From(estimate, frame.Image.Width, frame.Image.Height) : null;
+        var estimatedQuad = result.Estimate?.FrameToMosaic.MapRect(frame.Image.Width, frame.Image.Height);
+        TrackingUpdated?.Invoke(new TrackingUpdate(result.Status, hint, quad, _keyframeCount, _pending, Canvas.IsFull, _lastKnownQuad, blurry, dark,
+            recovery, estimatedQuad));
 
         if (_log.Enabled)
         {
@@ -282,6 +335,11 @@ public sealed class CaptureEngine
                 quad = quad is { } q ? DiagData.Quad(q) : null,
                 hint,
                 pose = frame.Pose is null ? null : new { tracking = frame.Pose.CameraTracking, plane = frame.Pose.Plane is not null },
+                recovery = recovery is null ? null : new
+                {
+                    dir = DiagData.R(recovery.ArrowDegrees, 0), px = DiagData.R(recovery.DistancePx, 0),
+                    frames = DiagData.R(recovery.DistanceInFrames, 2), tracked = recovery.Tracked
+                },
                 detail = result.Detail
             });
             LogStatsIfDue();

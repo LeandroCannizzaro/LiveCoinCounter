@@ -149,44 +149,65 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
-    public IReadOnlyList<SettingOption<bool>> SurfaceStyles { get; } = new[]
+    public IReadOnlyList<SettingOption<SurfaceLook>> SurfaceStyles { get; } = new[]
     {
-        new SettingOption<bool>(true, "Piano di colore",
-            "La superficie acquisita è un piano grigio ardesia con sopra solo le monete: niente ombre del telefono né cuciture."),
-        new SettingOption<bool>(false, "Foto del tavolo",
-            "Mostra la foto reale del tavolo: utile per controllare l'allineamento dei fotogrammi.")
+        new SettingOption<SurfaceLook>(SurfaceLook.Continuous, "Superficie continua",
+            "Un piano grigio ardesia pieno e continuo con sopra solo le monete: niente ombre del telefono, né bordi dei singoli fotogrammi."),
+        new SettingOption<SurfaceLook>(SurfaceLook.Frames, "Frame acquisiti",
+            "Il piano compare solo dove sono passati i fotogrammi: si vede quanto e come è stato coperto il tavolo."),
+        new SettingOption<SurfaceLook>(SurfaceLook.Photo, "Foto reale del tavolo",
+            "La foto del tavolo com'era: utile per controllare l'allineamento dei fotogrammi.")
     };
 
-    public SettingOption<bool> SelectedSurfaceStyle
+    public SettingOption<SurfaceLook> SelectedSurfaceStyle
     {
-        get => SurfaceStyles.First(o => o.Value == SettingsService.SolidSurface);
+        get => SurfaceStyles.First(o => o.Value == SettingsService.SurfaceLook);
         set
         {
             if (value is null) return;
-            SettingsService.SolidSurface = value.Value;
+            SettingsService.SurfaceLook = value.Value;
             OnPropertyChanged();
         }
     }
 
-    public IReadOnlyList<SettingOption<GridSpacing>> GridSpacings { get; } = new[]
-    {
-        new SettingOption<GridSpacing>(GridSpacing.Off, "Nessuna", "Senza griglia."),
-        new SettingOption<GridSpacing>(GridSpacing.Cm1, "Ogni 1 cm", "Griglia fitta per misurare le monete; i numeri compaiono ogni 5 cm."),
-        new SettingOption<GridSpacing>(GridSpacing.Cm2, "Ogni 2 cm", "Griglia media; i numeri compaiono ogni 10 cm."),
-        new SettingOption<GridSpacing>(GridSpacing.Cm5, "Ogni 5 cm", "Griglia larga; i numeri compaiono ogni 10 cm."),
-        new SettingOption<GridSpacing>(GridSpacing.Cm10, "Ogni 10 cm", "Solo i riferimenti principali.")
-    };
+    // ---- griglia metrica a due livelli ----
 
-    public SettingOption<GridSpacing> SelectedGridSpacing
+    public IReadOnlyList<SettingOption<int>> GridMinorChoices { get; } = GridConfig.MinorChoices
+        .Select(cm => new SettingOption<int>(cm, cm == 0 ? "Nessuna" : $"Ogni {cm} cm",
+            cm == 0 ? "Senza righe sottili." : $"Righe sottili ogni {cm} cm: per misurare le monete."))
+        .ToList();
+
+    public IReadOnlyList<SettingOption<int>> GridMajorChoices { get; } = GridConfig.MajorChoices
+        .Select(cm => new SettingOption<int>(cm, cm == 0 ? "Nessuna" : $"Ogni {cm} cm",
+            cm == 0 ? "Senza righe marcate." : $"Righe marcate ogni {cm} cm: i riferimenti principali."))
+        .ToList();
+
+    public SettingOption<int> SelectedGridMinor
     {
-        get => GridSpacings.First(o => o.Value == SettingsService.GridSpacing);
+        get => GridMinorChoices.FirstOrDefault(o => o.Value == SettingsService.Grid.MinorCm) ?? GridMinorChoices[0];
         set
         {
             if (value is null) return;
-            SettingsService.GridSpacing = value.Value;
+            SettingsService.Grid = SettingsService.Grid with { MinorCm = value.Value };
             OnPropertyChanged();
+            OnPropertyChanged(nameof(GridSummary));
         }
     }
+
+    public SettingOption<int> SelectedGridMajor
+    {
+        get => GridMajorChoices.FirstOrDefault(o => o.Value == SettingsService.Grid.MajorCm) ?? GridMajorChoices[0];
+        set
+        {
+            if (value is null) return;
+            SettingsService.Grid = SettingsService.Grid with { MajorCm = value.Value };
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(GridSummary));
+            OnPropertyChanged(nameof(SelectedGridMinor));   // il fine non può superare il principale: la scelta si ricarica
+        }
+    }
+
+    public string GridSummary => "Griglia: " + SettingsService.Grid.Label + ".";
 
     public string GridNote =>
         "La griglia ha la scala esatta con ARCore; con OpenCV la scala si stima dalle monete riconosciute (almeno 3) ed è indicativa: se il telefono era inclinato, cambia da un punto all'altro.";

@@ -1,4 +1,5 @@
 using LiveCoinCounter.Mosaic;
+using LiveCoinCounter.Sessions;
 
 namespace LiveCoinCounter.Controls;
 
@@ -17,17 +18,21 @@ public class MosaicView : View
     public Quad? FrameQuad { get; set; }
 
     /// <summary>Superficie come piano di colore (<see cref="SurfaceColor"/>) con solo le monete in foto, invece della foto del tavolo.</summary>
-    public bool SolidSurface { get; set; }
+    public SurfaceLook SurfaceStyle { get; set; } = SurfaceLook.Continuous;
 
     /// <summary>Colore ARGB del piano (vedi <see cref="MosaicCanvas.DefaultSurfaceColor"/>).</summary>
     public int SurfaceColor { get; set; } = MosaicCanvas.DefaultSurfaceColor;
 
-    /// <summary>Griglia metrica: pixel del mosaico per centimetro (0 = nessuna griglia) e passo in cm.</summary>
+    /// <summary>Griglia metrica: pixel del mosaico per centimetro (0 = nessuna griglia) e i due livelli, in cm (0 = livello spento).</summary>
     public float GridPxPerCm { get; set; }
-    public int GridCm { get; set; } = 1;
+    public int GridMinorCm { get; set; }
+    public int GridMajorCm { get; set; }
 
     /// <summary>Scritta della legenda della griglia (es. «Griglia 1 cm · scala stimata»).</summary>
     public string GridLabel { get; set; } = string.Empty;
+
+    /// <summary>Dove si crede di essere (a stima) quando il tracking è perso, a tratteggio: l'inquadratura attuale rispetto alla superficie.</summary>
+    public Quad? EstimatedQuad { get; set; }
 
     /// <summary>Ultima zona in cui il tracking era valido, mostrata (in arancione) solo quando la posizione è persa.</summary>
     public Quad? GhostQuad { get; set; }
@@ -51,6 +56,7 @@ public class MosaicView : View
         Boxes = Array.Empty<OverlayBox>();
         FrameQuad = null;
         GhostQuad = null;
+        EstimatedQuad = null;
         Preview = null;
         Handler?.Invoke(nameof(Clear));
     }

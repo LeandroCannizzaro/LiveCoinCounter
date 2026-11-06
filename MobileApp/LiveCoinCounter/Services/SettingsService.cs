@@ -41,17 +41,40 @@ public static class SettingsService
     /// Aspetto della superficie acquisita: piano di colore con solo le monete in foto (predefinito) oppure la foto intera
     /// del tavolo (utile per controllare le cuciture e il tracking). Il file della foto si salva comunque nella sessione.
     /// </summary>
-    public static bool SolidSurface
+    public static SurfaceLook SurfaceLook
     {
-        get => Preferences.Default.Get("solid_surface", true);
-        set => Preferences.Default.Set("solid_surface", value);
+        get
+        {
+            if (Preferences.Default.ContainsKey("surface_view"))
+                return Enum.TryParse<SurfaceLook>(Preferences.Default.Get("surface_view", nameof(SurfaceLook.Continuous)), out var v) ? v : SurfaceLook.Continuous;
+            // chi aveva l'interruttore "foto del tavolo" lo ritrova; chi aveva il piano parte dal piano continuo
+            return Preferences.Default.Get("solid_surface", true) ? SurfaceLook.Continuous : SurfaceLook.Photo;
+        }
+        set => Preferences.Default.Set("surface_view", value.ToString());
     }
 
-    /// <summary>Griglia metrica sulla superficie: nessuna (predefinito) o a passo di 1, 2, 5, 10 cm. Serve una scala nota o stimabile.</summary>
-    public static GridSpacing GridSpacing
+    /// <summary>
+    /// Griglia metrica a due livelli: passo fine (righe sottili) e passo principale (righe marcate), ciascuno configurabile o
+    /// spento. Predefinito: nessuna. Serve una scala nota o stimabile. Chi aveva scelto il vecchio passo unico lo ritrova.
+    /// </summary>
+    public static GridConfig Grid
     {
-        get => Enum.TryParse<GridSpacing>(Preferences.Default.Get("grid_spacing", nameof(GridSpacing.Off)), out var v) ? v : GridSpacing.Off;
-        set => Preferences.Default.Set("grid_spacing", value.ToString());
+        get
+        {
+            if (!Preferences.Default.ContainsKey("grid_minor") && Preferences.Default.ContainsKey("grid_spacing"))
+            {
+                var migrated = GridConfig.FromLegacy(Preferences.Default.Get("grid_spacing", "Off"));
+                Grid = migrated;
+                return migrated;
+            }
+            return new GridConfig(Preferences.Default.Get("grid_minor", 0), Preferences.Default.Get("grid_major", 0)).Normalized();
+        }
+        set
+        {
+            var grid = value.Normalized();
+            Preferences.Default.Set("grid_minor", grid.MinorCm);
+            Preferences.Default.Set("grid_major", grid.MajorCm);
+        }
     }
 
     /// <summary>Cosa conservare a fine sessione. Predefinito: mosaico e ritagli.</summary>

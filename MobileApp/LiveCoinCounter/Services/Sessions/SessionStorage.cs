@@ -42,6 +42,19 @@ public static class SessionStorage
     /// <summary>Il mosaico con la foto reale del tavolo (si salva sempre, anche quando l'impostazione mostra il piano di colore).</summary>
     public static string MosaicPhotoPath(string sessionId) => Path.Combine(Folder(sessionId), "mosaic_photo.jpg");
 
+    /// <summary>Superficie continua: piano pieno con le monete.</summary>
+    public static string MosaicSurfacePath(string sessionId) => Path.Combine(Folder(sessionId), "mosaic_surface.jpg");
+
+    /// <summary>Piano solo dove ci sono i fotogrammi acquisiti, con le monete.</summary>
+    public static string MosaicFramesPath(string sessionId) => Path.Combine(Folder(sessionId), "mosaic_frames.jpg");
+
+    public static string MosaicPathFor(string sessionId, SurfaceLook view) => view switch
+    {
+        SurfaceLook.Photo => MosaicPhotoPath(sessionId),
+        SurfaceLook.Frames => MosaicFramesPath(sessionId),
+        _ => MosaicSurfacePath(sessionId)
+    };
+
     /// <summary>Registro diagnostico della sessione: un evento JSON per riga.</summary>
     public static string DiagnosticsPath(string sessionId) => Path.Combine(Folder(sessionId), "diagnostics.jsonl");
 

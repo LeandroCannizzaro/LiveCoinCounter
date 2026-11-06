@@ -189,7 +189,8 @@ public sealed class MosaicCanvas
     /// Con <paramref name="surfaceArgb"/> la superficie acquisita è un piano di quel colore con solo le monete (cerchi in
     /// <paramref name="coins"/>) in foto; senza, è la foto intera.
     /// </summary>
-    public ArgbImage? Render(int maxSide, out float scale, out PointD origin, int? surfaceArgb = null, IReadOnlyList<RectF>? coins = null)
+    public ArgbImage? Render(int maxSide, out float scale, out PointD origin, int? surfaceArgb = null, IReadOnlyList<RectF>? coins = null,
+        bool fillGaps = false)
     {
         var circles = CoinCircles(coins);
         lock (_sync)
@@ -209,16 +210,17 @@ public sealed class MosaicCanvas
             origin = new PointD(minX, minY);
 
             var image = new ArgbImage(w, h);
-            var black = ImageOps.Argb(0, 0, 0);
+            // senza dati il pixel è nero, oppure (superficie continua) lo stesso colore del piano: nessun bordo frastagliato
+            var empty = fillGaps && surfaceArgb is { } plane ? plane : ImageOps.Argb(0, 0, 0);
             for (var y = 0; y < h; y++)
             for (var x = 0; x < w; x++)
             {
                 var mx = (int)((x + 0.5) / scale) + minX;
                 var my = (int)((y + 0.5) / scale) + minY;
                 var key = new TileKey(FloorDiv(mx), FloorDiv(my));
-                if (!_tiles.TryGetValue(key, out var tile)) { image.Pixels[y * w + x] = black; continue; }
+                if (!_tiles.TryGetValue(key, out var tile)) { image.Pixels[y * w + x] = empty; continue; }
                 var i = (my - key.Y * TileSize) * TileSize + (mx - key.X * TileSize);
-                if (tile.Weights[i] == 0) image.Pixels[y * w + x] = black;
+                if (tile.Weights[i] == 0) image.Pixels[y * w + x] = empty;
                 else if (surfaceArgb is { } surface && !InsideAny(circles, mx + 0.5, my + 0.5)) image.Pixels[y * w + x] = surface;
                 else image.Pixels[y * w + x] = tile.Pixels[i];
             }

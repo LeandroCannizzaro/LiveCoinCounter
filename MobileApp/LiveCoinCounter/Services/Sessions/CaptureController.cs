@@ -125,11 +125,20 @@ public sealed class CaptureController
             : ((ArgbImage, float, PointD)?)null);
         if (mosaic is { } m)
         {
+            // tre viste, tutte salvate: la schermata a tutto schermo le alterna senza rifare nulla
+            var plane = MosaicCanvas.DefaultSurfaceColor;
+            var continuous = await Task.Run(() => Engine.Canvas.Render(4096, out _, out _, plane, coinBoxes, fillGaps: true));
+            var frames = await Task.Run(() => Engine.Canvas.Render(4096, out _, out _, plane, coinBoxes, fillGaps: false));
             await AndroidImaging.SaveJpegAsync(m.Item1, SessionStorage.MosaicPhotoPath(session.Id), 88);
-            var shown = SettingsService.SolidSurface
-                ? await Task.Run(() => Engine.Canvas.Render(4096, out _, out _, MosaicCanvas.DefaultSurfaceColor, coinBoxes))
-                : null;
-            await AndroidImaging.SaveJpegAsync(shown ?? m.Item1, SessionStorage.MosaicPath(session.Id), 90);
+            await AndroidImaging.SaveJpegAsync(continuous ?? m.Item1, SessionStorage.MosaicSurfacePath(session.Id), 90);
+            await AndroidImaging.SaveJpegAsync(frames ?? m.Item1, SessionStorage.MosaicFramesPath(session.Id), 90);
+            var chosen = SettingsService.SurfaceLook switch
+            {
+                SurfaceLook.Photo => m.Item1,
+                SurfaceLook.Frames => frames ?? m.Item1,
+                _ => continuous ?? m.Item1
+            };
+            await AndroidImaging.SaveJpegAsync(chosen, SessionStorage.MosaicPath(session.Id), 90);
             session.MosaicPreviewPath = SessionStorage.MosaicPath(session.Id);
             session.PreviewScale = m.Item2;
             session.PreviewOriginX = m.Item3.X;

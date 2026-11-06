@@ -27,6 +27,11 @@ public sealed class CaptureViewModel : ObservableObject
     private volatile TrackingUpdate? _lastTracking;
     private volatile bool _coinsChanged;
     private string? _loggedHint;
+    private string? _stickyText;
+    private long _stickySince, _stickyLastSeen;
+    private bool _hasRecovery;
+    private double _arrowRotation;
+    private string _recoveryText = string.Empty;
     private bool _scaleDirty = true;
     private SurfaceScale? _gridScale;
     private bool _torchOn;
@@ -53,6 +58,25 @@ public sealed class CaptureViewModel : ObservableObject
             _controller.SetTorch(_torchOn);
             OnPropertyChanged(nameof(TorchSymbol));
         });
+    }
+
+    /// <summary>Da persi: la freccia (gradi, 0 = in alto, orario) e il testo con la direzione e la distanza stimata.</summary>
+    public bool HasRecovery
+    {
+        get => _hasRecovery;
+        private set => SetProperty(ref _hasRecovery, value);
+    }
+
+    public double ArrowRotation
+    {
+        get => _arrowRotation;
+        private set => SetProperty(ref _arrowRotation, value);
+    }
+
+    public string RecoveryText
+    {
+        get => _recoveryText;
+        private set => SetProperty(ref _recoveryText, value);
     }
 
     /// <summary>Accende e spegne la torcia: con poca luce l'immagine si sfoca e il tracking si perde.</summary>
@@ -231,15 +255,22 @@ public sealed class CaptureViewModel : ObservableObject
         }
 
         // aspetto della superficie e griglia metrica (impostazioni)
-        _view.SolidSurface = SettingsService.SolidSurface;
+        _view.SurfaceStyle = SettingsService.SurfaceLook;
         UpdateGrid(engine);
 
         if (_lastTracking is { } update)
         {
             var capturing = _state == State.Capturing;
             _view.FrameQuad = capturing ? update.FrameQuad : null;
-            _view.GhostQuad = capturing && update.Status == TrackStatus.Lost ? update.LastKnownQuad : null;
-            Hint = update.Hint ?? (update.PendingDetections > 3 ? "Analisi in corso: rallenta un po'" : null);
+            var lost = capturing && update.Status == TrackStatus.Lost;
+            _view.GhostQuad = lost ? update.LastKnownQuad : null;
+            _view.EstimatedQuad = lost ? update.EstimatedQuad : null;
+            UpdateRecovery(lost ? update.Recovery : null);
+
+            var shown = update.Hint ?? (update.PendingDetections > 3 ? "Analisi in corso: rallenta un po'" : null);
+            if (lost && update.Recovery is not null)
+                shown = "Posizione persa: segui la freccia per tornare nella zona già ripresa (o tocca ↻ per ricominciare)";
+            Hint = StickyHint(shown, important: lost);
 
             // immagini sfocate con luce sufficiente: prova a rimettere a fuoco (al massimo ogni 5 secondi)
             if (capturing && update.Blurry && !update.Dark && Environment.TickCount64 - _lastRefocusTick > 5000)
@@ -272,32 +303,71 @@ public sealed class CaptureViewModel : ObservableObject
         _view.Refresh(changed.Count > 0 ? changed.ToList() : Array.Empty<TileKey>());
     }
 
+    /// <summary>I suggerimenti passeggeri (es. «più lentamente») restano visibili almeno 1,5 s: prima comparivano e sparivano a ogni fotogramma.</summary>
+    private string? StickyHint(string? candidate, bool important)
+    {
+        var now = Environment.TickCount64;
+        if (candidate is not null)
+        {
+            if (candidate != _stickyText) { _stickyText = candidate; _stickySince = now; }
+            _stickyLastSeen = now;
+            return candidate;
+        }
+        if (!important && _stickyText is not null && now - _stickySince < 1500 && now - _stickyLastSeen < 1500) return _stickyText;
+        _stickyText = null;
+        return null;
+    }
+
+    /// <summary>La freccia che dice come muovere il telefono per riagganciarsi, con la distanza (in cm se la scala è nota).</summary>
+    private void UpdateRecovery(RecoveryGuidance? guidance)
+    {
+        HasRecovery = guidance is not null;
+        if (guidance is null) return;
+
+        ArrowRotation = guidance.ArrowDegrees;
+        string distance;
+        if (_gridScale is { } scale && scale.PxPerMm > 0)
+        {
+            var cm = guidance.DistancePx / (scale.PxPerMm * 10);
+            distance = cm < 3 ? "di poco" : $"di circa {Math.Round(cm / 5) * 5:0} cm";
+        }
+        else
+        {
+            var frames = guidance.DistanceInFrames;
+            distance = frames < 0.35 ? "di poco" : frames < 0.9 ? "di circa mezza inquadratura" : frames < 1.6 ? "di circa un'inquadratura" : "di più inquadrature";
+        }
+        RecoveryText = $"Sposta il telefono {guidance.DirectionWords} {distance}" + (guidance.Tracked ? "" : " · stima incerta");
+    }
+
     /// <summary>
     /// Griglia metrica: serve la scala. Con ARCore è misurata; con OpenCV si stima dalle monete riconosciute (almeno 3) e si
     /// riaggiorna quando ne arrivano di nuove. Finché non è nota la legenda lo dice.
     /// </summary>
     private void UpdateGrid(CaptureEngine engine)
     {
-        var spacing = SettingsService.GridSpacing;
         if (_view is null) return;
-        if (spacing == GridSpacing.Off)
-        {
-            _view.GridPxPerCm = 0;
-            _view.GridLabel = string.Empty;
-            return;
-        }
 
+        // la scala serve anche alla freccia di ritorno (distanza in cm), non solo alla griglia
         if (_scaleDirty || engine.PxPerMm is not null)
         {
             _scaleDirty = false;
             _gridScale = SurfaceScale.FromTracks(engine.PxPerMm, engine.Coins.Tracks);
         }
 
-        _view.GridCm = (int)spacing;
+        var grid = SettingsService.Grid;
+        if (grid.IsOff)
+        {
+            _view.GridPxPerCm = 0;
+            _view.GridLabel = string.Empty;
+            return;
+        }
+
+        _view.GridMinorCm = grid.MinorCm;
+        _view.GridMajorCm = grid.MajorCm;
         if (_gridScale is { } scale)
         {
             _view.GridPxPerCm = (float)(scale.PxPerMm * 10);
-            _view.GridLabel = $"Griglia {(int)spacing} cm · {scale.Label}";
+            _view.GridLabel = $"Griglia: {grid.Label} · {scale.Label}";
         }
         else
         {
