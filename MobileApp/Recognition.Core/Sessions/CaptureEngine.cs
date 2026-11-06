@@ -132,6 +132,12 @@ public sealed class CaptureEngine
     private sealed record PendingKeyframe(int Index, ArgbImage Image, Homography FrameToMosaic, float Quality);
 
     private readonly IMosaicTracker _tracker;
+
+    // le monete di ogni fotogramma chiave già analizzato (riquadro nel fotogramma e moneta), per riconoscerle confrontando le immagini
+    private readonly Dictionary<int, (int Width, int Height, List<(RectF Box, CoinTrack Track)> Coins)> _keyframeCoins = new();
+
+    /// <summary>Con quanti fotogrammi chiave precedenti (i più recenti) si confronta direttamente un fotogramma chiave nuovo.</summary>
+    private const int MaxRelatedKeyframes = 10;
     private readonly ICoinLocator _locator;
     private readonly ICaptureSink _sink;
     private readonly CaptureOptions _options;
@@ -488,6 +494,65 @@ public sealed class CaptureEngine
         }
     }
 
+    /// <summary>
+    /// Le monete del fotogramma chiave nuovo già viste in un fotogramma chiave precedente: il centro di ogni moneta, riportato con
+    /// l'omografia diretta tra le due immagini, deve cadere entro mezzo diametro da una moneta di quel fotogramma. Si parte dai
+    /// fotogrammi chiave più recenti; ogni moneta nota si usa una volta sola.
+    /// </summary>
+    private (Dictionary<int, CoinTrack> Known, List<object> Related) IdentifyByKeyframes(int index, IReadOnlyList<CoinObservation> observations)
+    {
+        var known = new Dictionary<int, CoinTrack>();
+        var related = new List<object>();
+        if (_tracker is not IKeyframeRelator relator || observations.Count == 0) return (known, related);
+
+        foreach (var (other, (width, height, coins)) in _keyframeCoins.Where(kv => kv.Key < index).OrderByDescending(kv => kv.Key).Take(MaxRelatedKeyframes).ToList())
+        {
+            if (known.Count == observations.Count) break;
+            if (relator.Relate(index, other) is not { } relation) continue;
+            var used = known.Values.ToHashSet();
+            var pairs = new List<(int Obs, int Coin, double Distance)>();
+            var inside = 0;
+            var candidates = new HashSet<int>();
+            for (var i = 0; i < observations.Count; i++)
+            {
+                if (known.ContainsKey(i)) continue;
+                var box = observations[i].FrameBox;
+                var (x, y) = relation.FromToTo.Apply(box.CenterX, box.CenterY);
+                // grandezza della moneta riportata nell'altra immagine (scala locale dell'omografia)
+                var (ex, ey) = relation.FromToTo.Apply(box.CenterX + box.Diameter / 2, box.CenterY);
+                var mapped = 2 * Math.Sqrt((ex - x) * (ex - x) + (ey - y) * (ey - y));
+                if (x > 0 && y > 0 && x < width && y < height) inside++;
+                for (var j = 0; j < coins.Count; j++)
+                {
+                    if (used.Contains(coins[j].Track)) continue;
+                    var c = coins[j].Box;
+                    var d = Math.Sqrt((x - c.CenterX) * (x - c.CenterX) + (y - c.CenterY) * (y - c.CenterY));
+                    if (d < DetectionFilter.SameCoinDistance * c.Diameter && Math.Abs(mapped / c.Diameter - 1) < 0.3)
+                    {
+                        pairs.Add((i, j, d));
+                        candidates.Add(i);
+                    }
+                }
+            }
+            // relazione sbagliata (punti in comune per caso): le monete riportate cadono a caso e poche trovano la loro corrispondente
+            if (inside >= 2 && candidates.Count < 0.6 * inside)
+            {
+                related.Add(new { keyframe = other, inliers = relation.Inliers, matched = 0, rejected = true, inside, candidates = candidates.Count });
+                continue;
+            }
+            var matched = 0;
+            foreach (var p in pairs.OrderBy(p => p.Distance))
+            {
+                if (known.ContainsKey(p.Obs) || used.Contains(coins[p.Coin].Track)) continue;
+                known[p.Obs] = coins[p.Coin].Track;
+                used.Add(coins[p.Coin].Track);
+                matched++;
+            }
+            related.Add(new { keyframe = other, inliers = relation.Inliers, matched });
+        }
+        return (known, related);
+    }
+
     private async Task DetectAsync(PendingKeyframe keyframe)
     {
         var timer = Stopwatch.StartNew();
@@ -534,7 +599,11 @@ public sealed class CaptureEngine
             keyframe.Index, u.Coin.Cents, u.Coin.ClassConfidence)).ToList();
         // solo per il registro: monete molto più grandi o piccole delle stesse già note = fotogramma collocato con la scala sbagliata
         var scaleRatio = Coins.KeyframeScaleRatio(observations);
-        var updates = Coins.ObserveKeyframe(observations);
+        // prima le monete già viste: confronto diretto con le immagini dei fotogrammi chiave precedenti, che non risente della deriva
+        // del mosaico; poi le altre con la posizione nel mosaico
+        var (known, related) = IdentifyByKeyframes(keyframe.Index, observations);
+        var updates = Coins.ObserveKeyframe(observations, known);
+        _keyframeCoins[keyframe.Index] = (image.Width, image.Height, observations.Select((o, i) => (o.FrameBox, updates[i].Track)).ToList());
 
         for (var k = 0; k < usable.Count; k++)
         {
@@ -558,7 +627,7 @@ public sealed class CaptureEngine
         {
             keyframe = keyframe.Index, locateMs = DiagData.R(locateMs), totalMs = DiagData.R(timer.Elapsed.TotalMilliseconds),
             raw = boxes.Count, accepted = changes.Count, tracks = Coins.Count, coinDiameterPx = DiagData.R(LastCoinDiameterPx, 0),
-            scaleRatio = scaleRatio is { } r ? DiagData.R(r, 2) : (double?)null, boxes = logged
+            scaleRatio = scaleRatio is { } r ? DiagData.R(r, 2) : (double?)null, identified = known.Count, related, boxes = logged
         });
 
         if (changes.Count == 0) return;

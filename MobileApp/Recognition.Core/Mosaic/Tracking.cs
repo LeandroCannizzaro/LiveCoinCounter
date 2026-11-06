@@ -56,6 +56,19 @@ public interface IMosaicTracker
     void CommitKeyframe(Homography frameToMosaic);
 }
 
+/// <summary>
+/// Mette in relazione due fotogrammi chiave confrontandone direttamente le immagini (punti caratteristici), senza passare dal
+/// mosaico: il confronto diretto non risente della deriva accumulata dalla catena di fotogrammi.
+/// </summary>
+public interface IKeyframeRelator
+{
+    /// <summary>
+    /// Omografia dai pixel del fotogramma chiave <paramref name="from"/> a quelli del fotogramma chiave <paramref name="to"/>
+    /// (indici nell'ordine in cui sono diventati chiave), con il numero di inlier; null se le due immagini non si sovrappongono abbastanza.
+    /// </summary>
+    (Homography FromToTo, int Inliers)? Relate(int from, int to);
+}
+
 public sealed record FeatureTrackerOptions
 {
     /// <summary>Lato massimo dell'immagine in grigio usata per le feature.</summary>
@@ -112,6 +125,15 @@ public sealed record FeatureTrackerOptions
 
     /// <summary>Se un candidato ha già almeno questi inlier (e rapporto ≥ 0,5) non si provano gli altri: dimezza il tempo per fotogramma.</summary>
     public int EarlyAcceptInliers { get; init; } = 80;
+
+    /// <summary>Un riferimento fisso (chiave o aggancio) vince sul fotogramma precedente se ha almeno questa frazione dei suoi inlier.</summary>
+    public double FixedReferenceMinShare { get; init; } = 0.6;
+
+    /// <summary>
+    /// Se un riferimento fisso con abbastanza inlier colloca il fotogramma lontano dalla catena (scostamento medio degli angoli oltre
+    /// questa frazione della diagonale) vince comunque: la catena ha derivato. 0 = disattivato.
+    /// </summary>
+    public double DriftOverrideDeviation { get; init; } = 0;
 }
 
 /// <summary>
@@ -119,7 +141,7 @@ public sealed record FeatureTrackerOptions
 /// precedente, così l'errore non si accumula) e si colloca con RANSAC. Se si perde, prova a rilocalizzarsi su tutti i
 /// fotogrammi chiave a turno, partendo da quelli vicini all'ultima posizione nota.
 /// </summary>
-public sealed class FeatureMosaicTracker : IMosaicTracker
+public sealed class FeatureMosaicTracker : IMosaicTracker, IKeyframeRelator
 {
     private sealed record Keyframe(FeatureSet Features, float GrayScale, Homography FrameToMosaic, PointD Center, double AreaScale, bool IsAnchor = false);
 
@@ -270,7 +292,10 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
         if (top.IsPrevious && references.Count > 0)
         {
             var fixedBest = references.MaxBy(s => s.Inliers);
-            if (fixedBest.Inliers >= 0.6 * top.Inliers && fixedBest.Inliers >= 2 * _options.MinInliers) chosen = fixedBest;
+            if (fixedBest.Inliers >= _options.FixedReferenceMinShare * top.Inliers && fixedBest.Inliers >= 2 * _options.MinInliers) chosen = fixedBest;
+            else if (_options.DriftOverrideDeviation > 0 && fixedBest.Inliers >= 2 * _options.MinInliers &&
+                     HybridMosaicTracker.Deviation(fixedBest.H, top.H, frame.Image.Width, frame.Image.Height) > _options.DriftOverrideDeviation)
+                chosen = fixedBest;
         }
 
         _lostFrames = 0;
@@ -346,11 +371,40 @@ public sealed class FeatureMosaicTracker : IMosaicTracker
 
     public void CommitKeyframe(Homography frameToMosaic)
     {
-        if (_pending is not { } p) return;
+        if (_pending is not { } p)
+        {
+            lock (_committed) _committed.Add(null);       // l'indice deve restare quello del motore
+            return;
+        }
         var center = Map(frameToMosaic, new PointD(p.Width / 2.0, p.Height / 2.0));
         var area = frameToMosaic.AreaScaleAt(p.Width / 2.0, p.Height / 2.0);
-        _keyframes.Add(new Keyframe(p.Features, p.Scale, frameToMosaic, center, area));
+        var keyframe = new Keyframe(p.Features, p.Scale, frameToMosaic, center, area);
+        _keyframes.Add(keyframe);
+        lock (_committed) _committed.Add(keyframe);
         _last = frameToMosaic;
+    }
+
+    /// <summary>Inlier minimi perché due fotogrammi chiave si dicano in relazione (più del minimo del tracking: qui si decide chi è chi).</summary>
+    public const int RelateMinInliers = 25;
+
+    // i fotogrammi chiave nell'ordine del motore (senza gli agganci); letto anche dal thread del rilevamento
+    private readonly List<Keyframe?> _committed = new();
+
+    public (Homography FromToTo, int Inliers)? Relate(int from, int to)
+    {
+        Keyframe? a, b;
+        lock (_committed)
+        {
+            if (from < 0 || to < 0 || from >= _committed.Count || to >= _committed.Count) return null;
+            a = _committed[from];
+            b = _committed[to];
+        }
+        if (a is null || b is null) return null;
+        var matches = FeatureMatcher.Match(a.Features, b.Features);
+        var ransac = HomographyRansac.Estimate(matches, _options.RansacThreshold, minInliers: _options.MinInliers);
+        if (ransac is null || ransac.Inliers < RelateMinInliers || ransac.InlierRatio < _options.MinInlierRatio) return null;
+        // pixel in grigio di a → pixel in grigio di b, riportati ai pixel originali
+        return (Homography.Scale(1 / b.GrayScale) * ransac.Homography * Homography.Scale(a.GrayScale), ransac.Inliers);
     }
 
     /// <summary>Primo fotogramma: ridotto alla scala del mosaico e ruotato come lo vede l'utente.</summary>
@@ -440,7 +494,7 @@ public sealed class ArCorePlaneTracker : IMosaicTracker
 /// Ibrido: la posa ARCore dà una stima robusta anche nei movimenti veloci, le feature la affinano al pixel contro i
 /// fotogrammi chiave vicini (cuciture più pulite). Se l'affinamento si discosta troppo dalla posa si tiene la posa.
 /// </summary>
-public sealed class HybridMosaicTracker : IMosaicTracker
+public sealed class HybridMosaicTracker : IMosaicTracker, IKeyframeRelator
 {
     private readonly ArCorePlaneTracker _pose;
     private readonly FeatureMosaicTracker _features;
@@ -475,6 +529,8 @@ public sealed class HybridMosaicTracker : IMosaicTracker
     }
 
     public void CommitKeyframe(Homography frameToMosaic) => _features.CommitKeyframe(frameToMosaic);
+
+    public (Homography FromToTo, int Inliers)? Relate(int from, int to) => _features.Relate(from, to);
 
     public static double Deviation(Homography a, Homography b, int width, int height)
     {

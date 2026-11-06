@@ -91,11 +91,24 @@ public sealed class CoinRegistry
         }
     }
 
-    public IReadOnlyList<CoinUpdate> ObserveKeyframe(IReadOnlyList<CoinObservation> observations)
+    public IReadOnlyList<CoinUpdate> ObserveKeyframe(IReadOnlyList<CoinObservation> observations) =>
+        ObserveKeyframe(observations, new Dictionary<int, CoinTrack>());
+
+    /// <summary>
+    /// Come <see cref="ObserveKeyframe(IReadOnlyList{CoinObservation})"/>, ma alcune osservazioni hanno già la loro moneta
+    /// (<paramref name="known"/>: indice dell'osservazione → traccia), trovata confrontando direttamente le immagini dei fotogrammi
+    /// chiave: valgono così come sono, le altre si abbinano tra le tracce rimaste.
+    /// </summary>
+    public IReadOnlyList<CoinUpdate> ObserveKeyframe(IReadOnlyList<CoinObservation> observations, IReadOnlyDictionary<int, CoinTrack> known)
     {
         lock (_sync)
         {
-            var assignment = Assign(observations);
+            var taken = known.Values.ToHashSet();
+            var rest = Enumerable.Range(0, observations.Count).Where(i => !known.ContainsKey(i)).ToList();
+            var restAssignment = Assign(rest.Select(i => observations[i]).ToList(), taken);
+            var assignment = new CoinTrack?[observations.Count];
+            foreach (var (i, track) in known) assignment[i] = track;
+            for (var k = 0; k < rest.Count; k++) assignment[rest[k]] = restAssignment[k];
             var updates = new List<CoinUpdate>(observations.Count);
             for (var i = 0; i < observations.Count; i++) updates.Add(Apply(observations[i], assignment[i]));
             return updates;
@@ -178,13 +191,13 @@ public sealed class CoinRegistry
     private static bool CentsCompatible(CoinTrack t, CoinObservation o) => t.DetectorCents is null || o.Cents is null || t.DetectorCents == o.Cents;
 
     /// <summary>Per ogni osservazione la traccia a cui appartiene, o null se è una moneta nuova.</summary>
-    private CoinTrack?[] Assign(IReadOnlyList<CoinObservation> obs)
+    private CoinTrack?[] Assign(IReadOnlyList<CoinObservation> obs, IReadOnlySet<CoinTrack>? taken = null)
     {
         var result = new CoinTrack?[obs.Count];
         if (obs.Count == 0 || _tracks.Count == 0) return result;
 
         var keyframe = obs[0].Keyframe;
-        var free = _tracks.Where(t => !t.Keyframes.Contains(keyframe)).ToList();
+        var free = _tracks.Where(t => !t.Keyframes.Contains(keyframe) && taken?.Contains(t) != true).ToList();
         if (free.Count == 0) return result;
 
         var transform = free.Count >= 6 && obs.Count >= 4 ? Align(obs, free, keyframe) : null;
