@@ -51,3 +51,22 @@ Sul dataset Kaggle `janstaffa` (150 foto, 336 monete, `--hough 45`): **richiamo 
 dotnet test MachineLearning/CoinLabeler.Tests
 ```
 Coprono la logica del consenso e il calcolo dell'IoU. L'integrazione con le API AI non è coperta da test automatici.
+
+## Sessioni dell'app con un set di monete noto
+
+```bash
+dotnet run --project MachineLearning/CoinLabeler -- sessions <uscita> <cartella-sessione> [<cartella-sessione> ...] [--set set1]
+```
+
+Le cartelle delle sessioni si scaricano dal telefono (`/sdcard/Android/data/com.LiveCoinCounter.app/files/sessions/<id>`), registrate con
+«Fotogrammi in debug». Il set è quello scritto nella nota della sessione («set1», «set2»...), oppure `--set` per le sessioni senza nota;
+le composizioni sono in `MachineLearning/datasets/coin-sets.json`.
+
+1. Si tolgono i doppioni del rilevatore. Se le monete restanti sono quante quelle del set, a ognuna si assegna un valore del set
+   (assegnazione ottimale su punteggi del modello, colore e diametro relativo). Una moneta è *sicura* se ogni altro valore è nettamente
+   meno probabile; quelle confermate a mano nell'app sono sicure. Le sessioni con un numero diverso di monete si saltano.
+2. I ritagli vanno in `crops/<valore>/` (le monete incerte in `crops/_incerte/`).
+3. Un fotogramma registrato ogni 0,4 s passa dal modello dell'app (`coin_model_s_640.onnx`, eseguito qui con OpenCV) e le monete trovate
+   si abbinano a quelle note riportate dal mosaico. Le monete senza etichetta sicura (incerte, tagliate dal bordo, attese ma non trovate)
+   si coprono di grigio e il fotogramma è `auto`. Se una copertura toccherebbe una moneta etichettata non si copre nulla e il
+   fotogramma è `review` (le monete senza etichetta non hanno `label`).

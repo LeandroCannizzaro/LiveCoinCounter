@@ -8,6 +8,8 @@ const string Usage = """
                                               [--source nome] [--hough N] [--no-ai]
     eval   <cartella_output> <dataset_yolo>   confronta i JSON con un dataset YOLO di riferimento
     report <cartella_output>                  rigenera report/index.html
+    sessions <cartella_output> <sessione>...  etichetta le sessioni dell'app fatte con un set di monete noto (nota «set1», «set2»...)
+                                              [--sets file.json] [--model modello.onnx] [--set setN per le sessioni senza nota]
 
     Le chiavi si passano con variabili d'ambiente: GEMINI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY...
     (opzionali: {ID}_MODEL, {ID}_BASE_URL). Con --no-ai si ottengono solo i box (nessuna chiamata a pagamento).
@@ -34,6 +36,8 @@ try
             HtmlReport.Build(args[1]);
             Console.WriteLine($"Creato {Path.Combine(args[1], "report", "index.html")}");
             return 0;
+        case "sessions" when args.Length >= 3:
+            return Sessions();
         default:
             Console.WriteLine(Usage);
             return 1;
@@ -43,6 +47,28 @@ catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
 {
     Console.Error.WriteLine(ex.Message);
     return 2;
+}
+
+int Sessions()
+{
+    // file dei set e modello: di default quelli del repository (si cercano risalendo dalla cartella corrente)
+    string? FindUp(string relative)
+    {
+        for (var d = new DirectoryInfo(Environment.CurrentDirectory); d is not null; d = d.Parent)
+            if (File.Exists(Path.Combine(d.FullName, relative))) return Path.Combine(d.FullName, relative);
+        return null;
+    }
+    var sets = Option("--sets", FindUp(Path.Combine("MachineLearning", "datasets", "coin-sets.json")) ?? "coin-sets.json");
+    var model = Option("--model", FindUp(Path.Combine("MobileApp", "LiveCoinCounter", "Resources", "Raw", "coin_model_s_640.onnx")) ?? "coin_model_s_640.onnx");
+    var defaultSet = Array.IndexOf(args, "--set") >= 0 ? Option("--set", "") : null;
+    var withValue = new HashSet<string> { "--sets", "--model", "--set" };
+    var sessions = new List<string>();
+    for (var i = 2; i < args.Length; i++)
+    {
+        if (withValue.Contains(args[i])) { i++; continue; }
+        if (!args[i].StartsWith("--")) sessions.Add(args[i]);
+    }
+    return SessionLabeler.Run(args[1], sets, model, defaultSet, sessions);
 }
 
 async Task<int> LabelAsync(string input, string output)
