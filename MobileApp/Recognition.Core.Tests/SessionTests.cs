@@ -316,6 +316,48 @@ public class RepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_shot_session_sums_its_shots_and_deletes_them_with_it()
+    {
+        var parent = await _repo.EnsureShotSessionAsync("20261106-220000-000", "features", "offline-model", RetentionMode.MosaicAndCrops, new DateTime(2026, 11, 6, 22, 0, 0));
+        Assert.Equal("features", (await _repo.EnsureShotSessionAsync(parent.Id, "x", "y", RetentionMode.MosaicAndCrops, DateTime.Now)).TrackerId);
+        Assert.Equal(SessionSource.Shots, parent.Source);
+
+        var shots = new List<SessionRecord>();
+        for (var k = 1; k <= 2; k++)
+        {
+            var s = await _repo.CreateSessionAsync(SessionSource.Live, "features", "offline-model", RetentionMode.MosaicAndCrops, new DateTime(2026, 11, 6, 22, k, 0));
+            s.SeriesId = parent.Id;
+            s.ShotIndex = k;
+            await _repo.UpdateSessionAsync(s);
+            shots.Add(s);
+        }
+        // le monete di ogni scatto hanno i numeri di quello scatto: 1, 2, ...
+        await _repo.UpsertCoinsAsync(shots[1].Id, new[] { new CoinRecord { Number = 1, State = CoinState.Classified, Cents = 50, ClassConfidence = 0.9f } });
+        await _repo.UpsertCoinsAsync(shots[0].Id, new[]
+        {
+            new CoinRecord { Number = 1, State = CoinState.Classified, Cents = 200, ClassConfidence = 0.9f },
+            new CoinRecord { Number = 2, State = CoinState.Classified, Cents = 10, ClassConfidence = 0.9f }
+        });
+        await _repo.RefreshTotalsAsync(shots[0].Id);
+        await _repo.RefreshTotalsAsync(shots[1].Id);
+
+        var total = (await _repo.GetSessionAsync(parent.Id))!;
+        Assert.Equal(260, total.TotalCents);
+        Assert.Equal(3, total.CoinCount);
+        Assert.Equal(new[] { shots[0].Id, shots[1].Id }, (await _repo.ListShotsAsync(parent.Id)).Select(s => s.Id));
+
+        // le monete della sessione a scatti: scatto per scatto
+        var coins = await _repo.ListCoinsAsync(parent.Id);
+        Assert.Equal(new[] { 200, 10, 50 }, coins.Select(c => c.Cents!.Value));
+        Assert.Equal(2, (await _repo.ListCoinsAsync(shots[0].Id)).Count);
+
+        await _repo.DeleteSessionAsync(parent.Id);
+        Assert.Null(await _repo.GetSessionAsync(shots[0].Id));
+        Assert.Null(await _repo.GetSessionAsync(shots[1].Id));
+        Assert.Empty(await _repo.ListCoinsAsync(shots[0].Id));
+    }
+
+    [Fact]
     public async Task Interrupted_sessions_are_listed()
     {
         var a = await _repo.CreateSessionAsync(SessionSource.Live, "t", "l", RetentionMode.MosaicAndCrops, new DateTime(2026, 1, 1));

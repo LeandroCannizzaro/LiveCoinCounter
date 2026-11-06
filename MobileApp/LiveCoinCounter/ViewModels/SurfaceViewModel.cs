@@ -10,8 +10,8 @@ namespace LiveCoinCounter.ViewModels;
 /// su un'altra sostituisce la selezione).
 /// <list type="bullet">
 /// <item>Una sessione (<c>id</c>): le opzioni (vista, riquadri, griglia) si scelgono nel riepilogo (<see cref="SurfaceOptions"/>).</item>
-/// <item>Una serie di scatti (<c>series</c>): una pila di superfici, una per scatto, da scorrere con le frecce o con uno swipe
-/// («Superficie k di n»); la vista di ogni superficie (continua, frame, foto) si cambia qui.</item>
+/// <item>Una sessione a scatti (<c>series</c>, eventualmente <c>index</c>): una pila di superfici, una per scatto, da scorrere con le
+/// frecce o con uno swipe («Superficie k di n»); le opzioni sono quelle della sessione, la vista si cambia anche qui.</item>
 /// </list>
 /// </summary>
 public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
@@ -49,7 +49,8 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
             CaptureViewModel.PendingShotSeries = _seriesId;
             await Shell.Current.GoToAsync("//CapturePage");
         });
-        DoneCommand = new Command(async () => await Shell.Current.GoToAsync("//SessionsPage"));
+        // il riepilogo della sessione a scatti sta sotto questa pagina
+        DoneCommand = new Command(async () => await Shell.Current.GoToAsync(".."));
     }
 
     public ICommand CloseCommand { get; }
@@ -104,7 +105,7 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
             var coins = _series.Sum(s => s.CoinCount);
             var cents = _series.Sum(s => s.TotalCents);
             return $"Questo scatto: {_session.CoinCount} monete, {SessionActions.Format(_session.TotalCents)} · " +
-                   $"serie: {coins} monete, {SessionActions.Format(cents)}";
+                   $"sessione: {coins} monete, {SessionActions.Format(cents)}";
         }
     }
 
@@ -161,6 +162,7 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
     {
         if (query.TryGetValue("id", out var id)) _sessionId = Uri.UnescapeDataString(id.ToString() ?? string.Empty);
         if (query.TryGetValue("series", out var series)) _seriesId = Uri.UnescapeDataString(series.ToString() ?? string.Empty);
+        if (query.TryGetValue("index", out var index) && int.TryParse(index.ToString(), out var i)) _index = i;
     }
 
     public async Task LoadAsync()
@@ -168,8 +170,7 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
         if (_seriesId is not null)
         {
             // gli scatti della serie, in ordine; si apre sull'ultimo (appena fatto) o si resta dove si era (ritorno da una correzione)
-            _series = (await SessionServices.Repository.ListSessionsAsync())
-                .Where(s => s.SeriesId == _seriesId).OrderBy(s => s.ShotIndex).ThenBy(s => s.StartedAt).ToList();
+            _series = await SessionServices.Repository.ListShotsAsync(_seriesId);
             if (_series.Count == 0) return;
             if (_index < 0 || _index >= _series.Count) _index = _series.Count - 1;
             _sessionId = _series[_index].Id;
@@ -180,7 +181,8 @@ public sealed class SurfaceViewModel : ObservableObject, IQueryAttributable
         if (_session is null) return;
         _coins = await SessionServices.Repository.ListCoinsAsync(_sessionId);
         _scale = SessionServices.ScaleOf(_session, _coins);
-        _options = SurfaceOptions.For(_sessionId);
+        // in una sessione a scatti le opzioni (vista, riquadri, griglia) sono quelle della sessione, uguali per tutte le superfici
+        _options = SurfaceOptions.For(_seriesId ?? _sessionId);
         _options.Configure(_scale);
 
         // al ritorno dalla correzione la moneta selezionata ha dati nuovi (valore, scartata...)

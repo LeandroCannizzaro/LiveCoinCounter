@@ -58,10 +58,10 @@
                             SemanticProperties.Description="Superficie precedente" />
                     <Button Grid.Column="1" Text="📷 Altro scatto" Command="{Binding AnotherShotCommand}" HeightRequest="44" CornerRadius="22" Padding="8,0"
                             FontSize="13" TextColor="White" BackgroundColor="{StaticResource Primary}"
-                            SemanticProperties.Description="Un altro scatto su un'altra parte del tavolo" />
+                            SemanticProperties.Description="Aggiungi a questa sessione uno scatto su un'altra parte del tavolo" />
                     <Button Grid.Column="2" Text="Fine" Command="{Binding DoneCommand}" HeightRequest="44" CornerRadius="22" Padding="16,0"
                             FontSize="13" TextColor="White" BackgroundColor="#55FFFFFF"
-                            SemanticProperties.Description="Fine della serie: torna all'elenco delle sessioni" />
+                            SemanticProperties.Description="Torna al riepilogo della sessione" />
                     <Button Grid.Column="3" Text="▶" Command="{Binding NextCommand}" WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="0"
                             FontSize="18" TextColor="White" BackgroundColor="#55FFFFFF"
                             SemanticProperties.Description="Superficie successiva" />

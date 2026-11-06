@@ -53,7 +53,7 @@ public sealed class CaptureController
     /// <summary>Avviso sul metodo effettivamente usato (es. ARCore non supportato).</summary>
     public string? Note { get; }
 
-    /// <param name="seriesId">Scatto singolo: la serie a cui aggiungere questa sessione (null per l'acquisizione continua).</param>
+    /// <param name="seriesId">Scatto: la sessione a scatti a cui aggiungere questo scatto, creata al primo (null per l'acquisizione continua).</param>
     /// <param name="paused">Il motore parte in pausa (si inquadra; lo scatto lo fa partire).</param>
     public static async Task<CaptureController> StartLiveAsync(string? seriesId = null, bool paused = false)
     {
@@ -64,10 +64,11 @@ public sealed class CaptureController
 
         if (seriesId is not null)
         {
-            var shot = (await repository.ListSessionsAsync()).Count(s => s.SeriesId == seriesId) + 1;
+            await repository.EnsureShotSessionAsync(seriesId, setup.Tracker.Id, locator.Id, SettingsService.Retention, DateTime.Now);
+            var shot = (await repository.ListShotsAsync(seriesId)).Count + 1;
             session.SeriesId = seriesId;
             session.ShotIndex = shot;
-            session.Name = $"Scatto {shot} · serie delle {SeriesTime(seriesId)}";
+            session.Name = $"Scatto {shot}";
             await repository.UpdateSessionAsync(session);
         }
 
@@ -109,10 +110,6 @@ public sealed class CaptureController
         }
         return controller;
     }
-
-    /// <summary>L'ora d'inizio di una serie (l'identificativo è «aaaaMMgg-hhmmss»).</summary>
-    private static string SeriesTime(string seriesId) =>
-        seriesId.Length >= 13 ? $"{seriesId[9..11]}:{seriesId[11..13]}" : seriesId;
 
     /// <summary>Una foto dalla galleria: stessa pipeline, un solo fotogramma chiave.</summary>
     public static async Task<CaptureController> StartPhotoAsync(byte[] photo)
@@ -196,6 +193,15 @@ public static class SessionProcessing
 {
     public static async Task ClassifyAsync(string sessionId, IProgress<(int Done, int Total)>? progress, CancellationToken ct)
     {
+        // sessione a scatti: scatto per scatto (il controllo dei diametri vale dentro uno scatto, la distanza dal tavolo cambia)
+        var shots = await SessionServices.Repository.ListShotsAsync(sessionId);
+        if (shots.Count > 0)
+        {
+            foreach (var shot in shots) await ClassifyAsync(shot.Id, progress, ct);
+            await SessionServices.UpdateShotSessionAsync(sessionId);
+            return;
+        }
+
         await using (var log = SessionDiagnostics.Open(sessionId, "classify"))
         {
             var classifier = new SessionClassifier(SessionServices.Repository, SessionServices.LoadCropAsync, log: log);
@@ -215,6 +221,14 @@ public static class SessionProcessing
     public static async Task<int> RetryUncertainWithAiAsync(string sessionId, IProgress<(int Done, int Total)>? progress, CancellationToken ct)
     {
         if (SettingsService.AiMode == AiMode.OfflineOnly) return 0;
+        var shots = await SessionServices.Repository.ListShotsAsync(sessionId);
+        if (shots.Count > 0)
+        {
+            var total = 0;
+            foreach (var shot in shots) total += await RetryUncertainWithAiAsync(shot.Id, progress, ct);
+            await SessionServices.UpdateShotSessionAsync(sessionId);
+            return total;
+        }
         var ai = await SessionServices.CreateAiClassifierAsync();
         await using var log = SessionDiagnostics.Open(sessionId, "classify_ai");
         var classifier = new SessionClassifier(SessionServices.Repository, SessionServices.LoadCropAsync, log: log);

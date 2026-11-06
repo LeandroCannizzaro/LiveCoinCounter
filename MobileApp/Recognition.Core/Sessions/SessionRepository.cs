@@ -66,6 +66,37 @@ public sealed class SessionRepository : IAsyncDisposable
         return session;
     }
 
+    /// <summary>
+    /// La sessione a scatti <paramref name="id"/>: la crea se non c'è. Gli scatti (sessioni con <see cref="SessionRecord.SeriesId"/> = id)
+    /// si aggiungono via via; totali e monete sono la loro somma.
+    /// </summary>
+    public async Task<SessionRecord> EnsureShotSessionAsync(string id, string trackerId, string locatorId, RetentionMode retention, DateTime now)
+    {
+        await InitAsync();
+        if (await _db.FindAsync<SessionRecord>(id) is { } existing) return existing;
+        var session = new SessionRecord
+        {
+            Id = id,
+            Name = $"Sessione a scatti del {now:dd/MM/yyyy HH:mm}",
+            StartedAt = now,
+            Status = SessionStatus.Completed,
+            Source = SessionSource.Shots,
+            TrackerId = trackerId,
+            LocatorId = locatorId,
+            Retention = retention
+        };
+        await _db.InsertAsync(session);
+        return session;
+    }
+
+    /// <summary>Gli scatti di una sessione a scatti, in ordine.</summary>
+    public async Task<List<SessionRecord>> ListShotsAsync(string sessionId)
+    {
+        await InitAsync();
+        return (await _db.Table<SessionRecord>().Where(s => s.SeriesId == sessionId).ToListAsync())
+            .OrderBy(s => s.ShotIndex).ThenBy(s => s.StartedAt).ToList();
+    }
+
     public async Task<SessionRecord?> GetSessionAsync(string id)
     {
         await InitAsync();
@@ -104,6 +135,14 @@ public sealed class SessionRepository : IAsyncDisposable
         await InitAsync();
         await _db.RunInTransactionAsync(c =>
         {
+            // una sessione a scatti si porta via i suoi scatti
+            foreach (var shot in c.Query<SessionRecord>("SELECT * FROM Session WHERE SeriesId = ?", id))
+            {
+                c.Execute("DELETE FROM Classification WHERE CoinId IN (SELECT Id FROM Coin WHERE SessionId = ?)", shot.Id);
+                c.Execute("DELETE FROM Coin WHERE SessionId = ?", shot.Id);
+                c.Execute("DELETE FROM Keyframe WHERE SessionId = ?", shot.Id);
+                c.Execute("DELETE FROM Session WHERE Id = ?", shot.Id);
+            }
             c.Execute("DELETE FROM Classification WHERE CoinId IN (SELECT Id FROM Coin WHERE SessionId = ?)", id);
             c.Execute("DELETE FROM Coin WHERE SessionId = ?", id);
             c.Execute("DELETE FROM Keyframe WHERE SessionId = ?", id);
@@ -154,10 +193,18 @@ public sealed class SessionRepository : IAsyncDisposable
         });
     }
 
+    /// <summary>Le monete della sessione; per una sessione a scatti quelle di tutti gli scatti (e le aggiunte a mano), scatto per scatto.</summary>
     public async Task<List<CoinRecord>> ListCoinsAsync(string sessionId)
     {
         await InitAsync();
-        return await _db.Table<CoinRecord>().Where(c => c.SessionId == sessionId).OrderBy(c => c.Number).ToListAsync();
+        var shots = await ListShotsAsync(sessionId);
+        if (shots.Count == 0)
+            return await _db.Table<CoinRecord>().Where(c => c.SessionId == sessionId).OrderBy(c => c.Number).ToListAsync();
+
+        var order = shots.Select((s, i) => (s.Id, i)).ToDictionary(x => x.Id, x => x.i + 1);
+        var ids = shots.Select(s => s.Id).Append(sessionId).ToList();
+        var coins = await _db.Table<CoinRecord>().Where(c => ids.Contains(c.SessionId)).ToListAsync();
+        return coins.OrderBy(c => order.GetValueOrDefault(c.SessionId, int.MaxValue)).ThenBy(c => c.Number).ToList();
     }
 
     public async Task<CoinRecord?> GetCoinAsync(int id)
@@ -206,6 +253,8 @@ public sealed class SessionRepository : IAsyncDisposable
         session.TotalCents = counted.Sum(c => c.EffectiveCents ?? 0);
         session.UncertainCount = counted.Count(c => c.IsUncertain);
         await _db.UpdateAsync(session);
+        // uno scatto: anche la sessione a scatti che lo contiene
+        if (session.SeriesId is { } parent && parent != session.Id) await RefreshTotalsAsync(parent);
         return session;
     }
 

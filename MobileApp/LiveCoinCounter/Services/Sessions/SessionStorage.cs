@@ -93,7 +93,28 @@ public static class SessionStorage
         var folder = Folder(session.Id);
         var zip = Path.Combine(FileSystem.CacheDirectory, $"sessione-{session.Id}.zip");
         if (File.Exists(zip)) File.Delete(zip);
-        ZipFile.CreateFromDirectory(folder, zip);
+        var shots = await SessionServices.Repository.ListShotsAsync(session.Id);
+        if (shots.Count == 0)
+        {
+            ZipFile.CreateFromDirectory(folder, zip);
+        }
+        else
+        {
+            // sessione a scatti: la sua cartella e, sotto «scatti/», quella di ogni scatto
+            using var archive = ZipFile.Open(zip, ZipArchiveMode.Create);
+            void Add(string root, string prefix)
+            {
+                if (!Directory.Exists(root)) return;
+                foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                    archive.CreateEntryFromFile(file, prefix + Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/'));
+            }
+            Add(folder, "");
+            foreach (var shot in shots)
+            {
+                await SessionServices.WriteSnapshotAsync(shot.Id);
+                Add(Folder(shot.Id), $"scatti/{shot.ShotIndex:D2}-{shot.Id}/");
+            }
+        }
         await Share.Default.RequestAsync(new ShareFileRequest(session.Name, new ShareFile(zip)));
     }
 }

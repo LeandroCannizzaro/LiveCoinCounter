@@ -58,6 +58,13 @@ internal static class SessionActions
         }
         await SessionDiagnostics.AppendAsync(coin.SessionId, "coin_edit", new { action, coin = coin.Number, before, after = Snapshot(coin) });
         await SessionServices.WriteSnapshotAsync(coin.SessionId);
+        // uno scatto: anche la sessione a scatti è verificata e ha l'istantanea aggiornata
+        if (session?.SeriesId is { } parent && await repository.GetSessionAsync(parent) is { } shots)
+        {
+            shots.ReviewedAt = DateTime.Now;
+            await repository.UpdateSessionAsync(shots);
+            await SessionServices.WriteSnapshotAsync(parent);
+        }
     }
 
     public static string Format(int cents) => $"{cents / 100},{cents % 100:D2} €";
@@ -66,13 +73,17 @@ internal static class SessionActions
 /// <summary>Una riga dell'elenco delle sessioni.</summary>
 public sealed class SessionItem
 {
-    public SessionItem(SessionRecord s)
+    public SessionItem(SessionRecord s, int shots = 0)
     {
         Record = s;
+        Shots = shots;
         Thumbnail = s.MosaicPreviewPath is { } p && File.Exists(p) ? ImageSource.FromFile(p) : null;
     }
 
     public SessionRecord Record { get; }
+
+    /// <summary>Sessione a scatti: quanti scatti.</summary>
+    public int Shots { get; }
     public string Id => Record.Id;
     public string Name => Record.Name;
     public string DateText => Record.StartedAt.ToString("ddd d MMM yyyy, HH:mm", SessionActions.Italian);
@@ -80,7 +91,8 @@ public sealed class SessionItem
     public string DetailText => Record.Status switch
     {
         SessionStatus.Completed => $"{Record.CoinCount} monete" + (Record.UncertainCount > 0 ? $" · {Record.UncertainCount} incerte" : "") +
-                                   (Record.Source == SessionSource.Photo ? " · da foto" : ""),
+                                   (Record.Source == SessionSource.Photo ? " · da foto" : "") +
+                                   (Record.Source == SessionSource.Shots ? (Shots == 1 ? " · 1 scatto" : $" · {Shots} scatti") : ""),
         SessionStatus.Aborted => "Annullata",
         _ => "Da completare"
     };
@@ -111,8 +123,10 @@ public sealed class SessionsViewModel : ObservableObject
     public async Task LoadAsync()
     {
         var list = await SessionServices.Repository.ListSessionsAsync();
+        if (await SessionServices.AdoptOrphanShotsAsync(list) > 0) list = await SessionServices.Repository.ListSessionsAsync();
+        var shots = list.Where(s => s.SeriesId is not null).GroupBy(s => s.SeriesId!).ToDictionary(g => g.Key, g => g.Count());
         Sessions.Clear();
-        foreach (var s in list) Sessions.Add(new SessionItem(s));
+        foreach (var s in list.Where(s => s.SeriesId is null)) Sessions.Add(new SessionItem(s, shots.GetValueOrDefault(s.Id)));
         IsEmpty = Sessions.Count == 0;
     }
 
@@ -148,12 +162,24 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
     private string _busyText = string.Empty;
     private SurfaceOptions? _options;
     private int _surfaceVersion;
+    private List<SessionRecord> _shots = new();
+    private int _shot;
 
     public SessionSummaryViewModel()
     {
         OpenSurfaceCommand = new Command(async () =>
         {
-            if (_sessionId is not null) await Shell.Current.GoToAsync($"surface?id={Uri.EscapeDataString(_sessionId)}");
+            if (_sessionId is null) return;
+            if (IsShots) await Shell.Current.GoToAsync($"surface?series={Uri.EscapeDataString(_sessionId)}&index={_shot}");
+            else await Shell.Current.GoToAsync($"surface?id={Uri.EscapeDataString(_sessionId)}");
+        });
+        PreviousShotCommand = new Command(async () => await ShowShotAsync(_shot - 1), () => _shot > 0);
+        NextShotCommand = new Command(async () => await ShowShotAsync(_shot + 1), () => _shot < _shots.Count - 1);
+        AnotherShotCommand = new Command(async () =>
+        {
+            if (_sessionId is null) return;
+            CaptureViewModel.PendingShotSeries = _sessionId;
+            await Shell.Current.GoToAsync("//CapturePage");
         });
         AllCorrectCommand = new Command(async () => await AllCorrectAsync(), () => !IsBusy);
         NoteCommand = new Command(async () => await EditNoteAsync());
@@ -172,6 +198,64 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
     /// <summary>La superficie acquisita a tutto schermo, da ingrandire.</summary>
     public ICommand OpenSurfaceCommand { get; }
 
+    /// <summary>Sessione a scatti: la superficie dello scatto precedente / successivo.</summary>
+    public ICommand PreviousShotCommand { get; }
+    public ICommand NextShotCommand { get; }
+
+    /// <summary>Sessione a scatti: un altro scatto, su un'altra parte del tavolo.</summary>
+    public ICommand AnotherShotCommand { get; }
+
+    /// <summary>Una sessione a scatti: le monete sono la somma degli scatti, una superficie per scatto.</summary>
+    public bool IsShots => _shots.Count > 0;
+
+    /// <summary>«Superficie k di n».</summary>
+    public string ShotPositionText => IsShots ? $"Superficie {_shot + 1} di {_shots.Count}" : string.Empty;
+
+    /// <summary>Le monete dello scatto mostrato.</summary>
+    public string ShotTotalText
+    {
+        get
+        {
+            if (!IsShots) return string.Empty;
+            var shot = _shots[_shot];
+            return $"In questo scatto: {shot.CoinCount} monete, {SessionActions.Format(shot.TotalCents)}";
+        }
+    }
+
+    /// <summary>Swipe sulla superficie: verso sinistra la successiva, verso destra la precedente.</summary>
+    public void Swipe(bool towardsLeft)
+    {
+        var command = towardsLeft ? NextShotCommand : PreviousShotCommand;
+        if (IsShots && command.CanExecute(null)) command.Execute(null);
+    }
+
+    private async Task ShowShotAsync(int index)
+    {
+        if (index < 0 || index >= _shots.Count || index == _shot) return;
+        _shot = index;
+        ConfigureOptions();
+        NotifyShots();
+        await RenderSurfaceAsync();
+    }
+
+    private void NotifyShots()
+    {
+        foreach (var p in new[] { nameof(IsShots), nameof(ShotPositionText), nameof(ShotTotalText) }) OnPropertyChanged(p);
+        ((Command)PreviousShotCommand).ChangeCanExecute();
+        ((Command)NextShotCommand).ChangeCanExecute();
+    }
+
+    /// <summary>La superficie mostrata: la sessione stessa o lo scatto scelto, con le sue monete.</summary>
+    private (SessionRecord Session, List<CoinRecord> Coins)? Surface() =>
+        _session is null ? null
+        : IsShots ? (_shots[_shot], _coins.Where(c => c.SessionId == _shots[_shot].Id).ToList())
+        : (_session, _coins);
+
+    private void ConfigureOptions()
+    {
+        if (_options is not null && Surface() is { } surface) _options.Configure(SessionServices.ScaleOf(surface.Session, surface.Coins));
+    }
+
     /// <summary>Cosa mostrare della superficie (vista, riquadri, griglia): valgono anche a tutto schermo.</summary>
     public SurfaceOptions? Options => _options;
 
@@ -185,9 +269,8 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
     private async Task RenderSurfaceAsync()
     {
-        if (_session is null || _options is null) return;
-        var session = _session;
-        var coins = _coins;
+        if (_options is null || Surface() is not { } surface) return;
+        var (session, coins) = surface;
         var render = _options.ToRender();
         var mine = ++_surfaceVersion;
         var annotated = await Task.Run(() => ImageHelper.DrawSessionMosaic(session, coins, render));
@@ -242,8 +325,12 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
     public bool CanMarkAllCorrect => _coins.Any(c => c.State == CoinState.Classified && !c.Verified);
 
     public string MethodText => _session is null ? string.Empty :
-        $"{(_session.Source == SessionSource.Photo ? "Da foto" : $"Mosaico: {_session.TrackerId}, {_session.KeyframeCount} fotogrammi chiave")} · " +
-        $"riconoscimento: {_session.ClassifierId ?? "—"}";
+        (_session.Source switch
+        {
+            SessionSource.Photo => "Da foto",
+            SessionSource.Shots => $"{_shots.Count} scatti ({_session.TrackerId}), {_session.KeyframeCount} fotogrammi chiave",
+            _ => $"Mosaico: {_session.TrackerId}, {_session.KeyframeCount} fotogrammi chiave"
+        }) + $" · riconoscimento: {_session.ClassifierId ?? "—"}";
 
     public List<CoinResult> Denominations { get; private set; } = new();
 
@@ -287,6 +374,9 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
         _session = await SessionServices.Repository.GetSessionAsync(_sessionId);
         if (_session is null) return;
         _coins = await SessionServices.Repository.ListCoinsAsync(_sessionId);
+        _shots = await SessionServices.Repository.ListShotsAsync(_sessionId);
+        if (_shot >= _shots.Count) _shot = Math.Max(0, _shots.Count - 1);
+        NotifyShots();
 
         Denominations = _coins.Where(c => c.EffectiveCents is not null)
             .GroupBy(c => c.EffectiveCents!.Value)
@@ -296,7 +386,7 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
         Detach();
         _options = SurfaceOptions.For(_sessionId);
-        _options.Configure(SessionServices.ScaleOf(_session, _coins));
+        ConfigureOptions();
         _options.Changed += OnOptionsChanged;
         OnPropertyChanged(nameof(Options));
         await RenderSurfaceAsync();
@@ -407,16 +497,19 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 /// <summary>Una moneta nell'elenco: ritaglio, valore attribuito e confidenza.</summary>
 public sealed class CoinItem
 {
-    public CoinItem(CoinRecord c)
+    public CoinItem(CoinRecord c, int shot = 0)
     {
         Record = c;
+        Shot = shot;
         Crop = c.CropPath is { } p && File.Exists(p) ? ImageSource.FromFile(p) : null;
     }
 
     public CoinRecord Record { get; }
     public int Id => Record.Id;
     public ImageSource? Crop { get; }
-    public string Title => Record.IsManual ? "Aggiunta a mano" : $"Moneta {Record.Number}";
+    /// <summary>Sessione a scatti: lo scatto della moneta (0 per le altre sessioni).</summary>
+    public int Shot { get; }
+    public string Title => Record.IsManual ? "Aggiunta a mano" : Shot > 0 ? $"Scatto {Shot} · moneta {Record.Number}" : $"Moneta {Record.Number}";
 
     public string ValueText => Record.State switch
     {
@@ -452,6 +545,7 @@ public sealed class CoinListViewModel : ObservableObject, IQueryAttributable
     private string? _sessionId;
     private bool _onlyUncertain;
     private List<CoinRecord> _all = new();
+    private Dictionary<string, int> _shotOf = new();
 
     public CoinListViewModel()
     {
@@ -508,6 +602,7 @@ public sealed class CoinListViewModel : ObservableObject, IQueryAttributable
     {
         if (_sessionId is null) return;
         _all = await SessionServices.Repository.ListCoinsAsync(_sessionId);
+        _shotOf = (await SessionServices.Repository.ListShotsAsync(_sessionId)).ToDictionary(s => s.Id, s => s.ShotIndex);
         Filter();
         OnPropertyChanged(nameof(SummaryText));
     }
@@ -517,7 +612,7 @@ public sealed class CoinListViewModel : ObservableObject, IQueryAttributable
         Coins.Clear();
         foreach (var c in _all.Where(c => !OnlyUncertain || c.IsUncertain)
                      .OrderBy(c => c.State == CoinState.Rejected).ThenBy(c => c.ClassConfidence).ThenBy(c => c.Number))
-            Coins.Add(new CoinItem(c));
+            Coins.Add(new CoinItem(c, _shotOf.GetValueOrDefault(c.SessionId)));
     }
 }
 

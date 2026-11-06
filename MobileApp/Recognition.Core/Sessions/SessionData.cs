@@ -4,7 +4,8 @@ namespace LiveCoinCounter.Sessions;
 
 public enum SessionStatus { Acquiring, Classifying, Completed, Aborted }
 
-public enum SessionSource { Live, Photo }
+/// <summary>Da dove vengono le monete: acquisizione continua, foto, oppure una sessione a scatti (somma degli scatti, ognuno una sessione figlia).</summary>
+public enum SessionSource { Live, Photo, Shots }
 
 public enum CoinState { Detected, Classified, Corrected, Rejected }
 
@@ -63,7 +64,10 @@ public sealed class SessionRecord
     public int UncertainCount { get; set; }
     public string? Notes { get; set; }
 
-    /// <summary>Scatto singolo: la serie di scatti (su parti diverse del tavolo) a cui appartiene la sessione; null per le altre.</summary>
+    /// <summary>
+    /// Scatto: la sessione a scatti (<see cref="SessionSource.Shots"/>) di cui questa sessione è uno scatto; null per le altre.
+    /// Gli scatti non compaiono nell'elenco: le loro monete si sommano nella sessione a scatti.
+    /// </summary>
     public string? SeriesId { get; set; }
 
     /// <summary>Posizione dello scatto nella serie (1, 2, ...).</summary>

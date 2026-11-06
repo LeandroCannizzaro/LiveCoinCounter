@@ -76,7 +76,54 @@ public static class SessionServices
 
     public static async Task DeleteSessionAsync(string sessionId)
     {
+        // una sessione a scatti: anche le cartelle dei suoi scatti
+        var shots = await Repository.ListShotsAsync(sessionId);
         await Repository.DeleteSessionAsync(sessionId);
+        foreach (var shot in shots) SessionStorage.Delete(shot.Id);
         SessionStorage.Delete(sessionId);
+    }
+
+    /// <summary>
+    /// Scatti senza la loro sessione a scatti (fatti con la versione che li mostrava come sessioni separate): si raccolgono in una
+    /// sessione a scatti, altrimenti non comparirebbero più nell'elenco. Restituisce quante sessioni a scatti ha creato.
+    /// </summary>
+    public static async Task<int> AdoptOrphanShotsAsync(IReadOnlyList<SessionRecord> sessions)
+    {
+        var ids = sessions.Select(s => s.Id).ToHashSet();
+        var created = 0;
+        foreach (var group in sessions.Where(s => s.SeriesId is not null && !ids.Contains(s.SeriesId)).GroupBy(s => s.SeriesId!))
+        {
+            var first = group.OrderBy(s => s.StartedAt).First();
+            await Repository.EnsureShotSessionAsync(group.Key, first.TrackerId, first.LocatorId, first.Retention, first.StartedAt);
+            await UpdateShotSessionAsync(group.Key);
+            created++;
+        }
+        return created;
+    }
+
+    /// <summary>
+    /// Elimina uno scatto della sessione a scatti; se era l'ultimo, anche la sessione a scatti (rimasta vuota).
+    /// </summary>
+    public static async Task DeleteShotAsync(string shotId, string seriesId)
+    {
+        await DeleteSessionAsync(shotId);
+        if ((await Repository.ListShotsAsync(seriesId)).Count == 0) await DeleteSessionAsync(seriesId);
+        else await Repository.RefreshTotalsAsync(seriesId);
+    }
+
+    /// <summary>
+    /// Dopo uno scatto: la sessione a scatti prende totali, anteprima (il primo scatto), fine e metodo dagli scatti, e riscrive l'istantanea.
+    /// </summary>
+    public static async Task UpdateShotSessionAsync(string seriesId)
+    {
+        var session = await Repository.RefreshTotalsAsync(seriesId);
+        if (session is null) return;
+        var shots = await Repository.ListShotsAsync(seriesId);
+        session.MosaicPreviewPath = shots.Select(s => s.MosaicPreviewPath).FirstOrDefault(p => p is not null && File.Exists(p));
+        session.EndedAt = shots.Max(s => s.EndedAt) ?? DateTime.Now;
+        session.KeyframeCount = shots.Sum(s => s.KeyframeCount);
+        session.ClassifierId = shots.Select(s => s.ClassifierId).LastOrDefault(c => c is not null) ?? session.ClassifierId;
+        await Repository.UpdateSessionAsync(session);
+        await WriteSnapshotAsync(seriesId);
     }
 }

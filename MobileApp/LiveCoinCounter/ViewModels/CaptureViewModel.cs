@@ -57,7 +57,7 @@ public sealed class CaptureViewModel : ObservableObject
     {
         ToggleCommand = new Command(async () => await ToggleAsync(), () => _state is State.Idle or State.Capturing);
         ImportPhotoCommand = new Command(async () => await ImportPhotoAsync(), () => _state == State.Idle);
-        SingleShotCommand = new Command(async () => await EnterShotModeAsync(DateTime.Now.ToString("yyyyMMdd-HHmmss")), () => _state == State.Idle);
+        SingleShotCommand = new Command(async () => await EnterShotModeAsync(DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture)), () => _state == State.Idle);
         ShutterCommand = new Command(async () => await TakeShotAsync(), () => _shotPreview && !_shotRunning);
         CancelShotCommand = new Command(async () => await CancelShotAsync(), () => _shotPreview && !_shotRunning);
         CancelProcessingCommand = new Command(() => _processingCts?.Cancel());
@@ -216,8 +216,12 @@ public sealed class CaptureViewModel : ObservableObject
                 var choice = await page.DisplayActionSheetAsync(
                     $"«{session.Name}» è stata interrotta con {coins.Count} monete trovate. Cosa vuoi fare?",
                     "Più tardi", "Elimina", "Completa la sessione");
-                if (choice == "Elimina") await SessionServices.DeleteSessionAsync(session.Id);
-                else if (choice == "Completa la sessione") { await ProcessAndOpenAsync(session.Id); return; }
+                if (choice == "Elimina")
+                {
+                    if (session.SeriesId is { } parent) await SessionServices.DeleteShotAsync(session.Id, parent);
+                    else await SessionServices.DeleteSessionAsync(session.Id);
+                }
+                else if (choice == "Completa la sessione") { await ProcessAndOpenAsync(session.Id, session.SeriesId); return; }
                 else return;
             }
         }
@@ -287,7 +291,7 @@ public sealed class CaptureViewModel : ObservableObject
         if (_state == State.Capturing) await StopAsync(openSeries: _shotSeries);
     }
 
-    /// <summary>Esce dall'inquadratura senza scattare: la sessione vuota si elimina.</summary>
+    /// <summary>Esce dall'inquadratura senza scattare: lo scatto vuoto si elimina (e la sessione a scatti, se non ne ha altri).</summary>
     private async Task CancelShotAsync()
     {
         if (_controller is not { } controller || _shotRunning) return;
@@ -301,7 +305,8 @@ public sealed class CaptureViewModel : ObservableObject
         try
         {
             await controller.StopAsync();
-            await SessionServices.DeleteSessionAsync(controller.Session.Id);
+            if (controller.Session.SeriesId is { } series) await SessionServices.DeleteShotAsync(controller.Session.Id, series);
+            else await SessionServices.DeleteSessionAsync(controller.Session.Id);
         }
         catch (Exception ex)
         {
@@ -687,7 +692,12 @@ public sealed class CaptureViewModel : ObservableObject
         }
 
         if (openSeries is not null)
+        {
+            // lo scatto si somma alla sessione a scatti: si apre il suo riepilogo e sopra la pila delle superfici, sull'ultimo scatto
+            await SessionServices.UpdateShotSessionAsync(openSeries);
+            await Shell.Current.GoToAsync($"session?id={Uri.EscapeDataString(openSeries)}", false);
             await Shell.Current.GoToAsync($"surface?series={Uri.EscapeDataString(openSeries)}");
+        }
         else
             await Shell.Current.GoToAsync($"session?id={Uri.EscapeDataString(sessionId)}");
     }
