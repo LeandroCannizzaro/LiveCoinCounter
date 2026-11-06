@@ -146,6 +146,8 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
     private ImageSource? _mosaicImage;
     private bool _isBusy;
     private string _busyText = string.Empty;
+    private SurfaceOptions? _options;
+    private int _surfaceVersion;
 
     public SessionSummaryViewModel()
     {
@@ -169,6 +171,29 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
 
     /// <summary>La superficie acquisita a tutto schermo, da ingrandire.</summary>
     public ICommand OpenSurfaceCommand { get; }
+
+    /// <summary>Cosa mostrare della superficie (vista, riquadri, griglia): valgono anche a tutto schermo.</summary>
+    public SurfaceOptions? Options => _options;
+
+    /// <summary>La pagina esce di scena: si smette di ascoltare le opzioni (le riprende il prossimo caricamento).</summary>
+    public void Detach()
+    {
+        if (_options is not null) _options.Changed -= OnOptionsChanged;
+    }
+
+    private void OnOptionsChanged() => _ = RenderSurfaceAsync();
+
+    private async Task RenderSurfaceAsync()
+    {
+        if (_session is null || _options is null) return;
+        var session = _session;
+        var coins = _coins;
+        var render = _options.ToRender();
+        var mine = ++_surfaceVersion;
+        var annotated = await Task.Run(() => ImageHelper.DrawSessionMosaic(session, coins, render));
+        if (mine != _surfaceVersion) return;      // nel frattempo l'utente ha cambiato un'altra opzione: vale l'ultima
+        MosaicImage = annotated is null ? null : ImageSource.FromStream(() => new MemoryStream(annotated));
+    }
 
     /// <summary>«Tutte le monete sono giuste»: conferma in blocco i riconoscimenti non ancora controllati.</summary>
     public ICommand AllCorrectCommand { get; }
@@ -269,11 +294,12 @@ public sealed class SessionSummaryViewModel : ObservableObject, IQueryAttributab
             .Select(g => new CoinResult { Denomination = EuroCoins.NameOf(g.Key), ValueInCents = g.Key, Count = g.Count() })
             .ToList();
 
-        var session = _session;
-        var coins = _coins;
-        var options = new SurfaceRender(View: SettingsService.SurfaceLook, Boxes: true, Grid: SettingsService.Grid, Scale: SessionServices.ScaleOf(session, coins));
-        var annotated = await Task.Run(() => ImageHelper.DrawSessionMosaic(session, coins, options));
-        MosaicImage = annotated is null ? null : ImageSource.FromStream(() => new MemoryStream(annotated));
+        Detach();
+        _options = SurfaceOptions.For(_sessionId);
+        _options.Configure(SessionServices.ScaleOf(_session, _coins));
+        _options.Changed += OnOptionsChanged;
+        OnPropertyChanged(nameof(Options));
+        await RenderSurfaceAsync();
 
         foreach (var p in new[] { nameof(Name), nameof(DateText), nameof(TotalText), nameof(CoinCount), nameof(UncertainCount),
                      nameof(HasUncertain), nameof(UncertainText), nameof(CanRetryAi), nameof(MethodText), nameof(Denominations),

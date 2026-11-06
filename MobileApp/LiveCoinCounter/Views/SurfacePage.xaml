@@ -10,7 +10,8 @@
              BackgroundColor="#101012">
 
     <Grid>
-        <!-- La superficie: pizzica per ingrandire, trascina per spostarti, doppio tocco per ingrandire o tornare intero -->
+        <!-- Solo la superficie, la più grande possibile: pizzica per ingrandire, trascina per spostarti, doppio tocco per ingrandire
+             o tornare intero, tocca una moneta per i suoi dettagli. Le opzioni (vista, riquadri, griglia) sono nel riepilogo. -->
         <Grid x:Name="Stage" BackgroundColor="#101012">
             <Grid.GestureRecognizers>
                 <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
@@ -20,43 +21,16 @@
             <Image x:Name="Surface" Source="{Binding Image}" Aspect="AspectFit" />
         </Grid>
 
-        <!-- In alto: chiudi e titolo -->
-        <Grid VerticalOptions="Start" Padding="12,44,12,8" ColumnDefinitions="Auto,*" ColumnSpacing="10" BackgroundColor="#66000000">
-            <Button Text="✕" Command="{Binding CloseCommand}" WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="0"
-                    FontSize="20" TextColor="White" BackgroundColor="#55FFFFFF"
-                    SemanticProperties.Description="Chiudi la superficie a tutto schermo" />
-            <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
-                <Label Text="{Binding Title}" TextColor="White" FontSize="15" FontAttributes="Bold" LineBreakMode="TailTruncation" />
-                <Label Text="Pizzica per ingrandire · doppio tocco per ingrandire o tornare intero" TextColor="#BBFFFFFF" FontSize="11" />
-            </VerticalStackLayout>
-        </Grid>
+        <!-- Chiudi: un pulsante piccolo sopra la superficie -->
+        <Button Text="✕" Command="{Binding CloseCommand}" VerticalOptions="Start" HorizontalOptions="Start" Margin="12,44,0,0"
+                WidthRequest="44" HeightRequest="44" CornerRadius="22" Padding="0"
+                FontSize="20" TextColor="White" BackgroundColor="#88000000"
+                SemanticProperties.Description="Chiudi la superficie a tutto schermo" />
 
-        <!-- I dati della moneta toccata (solo con i riquadri spenti) -->
-        <Border IsVisible="{Binding HasDetail}" VerticalOptions="Start" Margin="12,112,12,0" Padding="12,8" StrokeThickness="0"
+        <!-- I dati della moneta toccata -->
+        <Border IsVisible="{Binding HasDetail}" VerticalOptions="End" Margin="12,0,12,24" Padding="12,8" StrokeThickness="0"
                 StrokeShape="RoundRectangle 12" BackgroundColor="#DD1A1A1E" InputTransparent="True">
             <Label Text="{Binding DetailText}" TextColor="White" FontSize="12" LineBreakMode="WordWrap" />
-        </Border>
-
-        <!-- In basso: cosa mostrare -->
-        <Border VerticalOptions="End" Margin="12,0,12,24" Padding="14,10" StrokeThickness="0" StrokeShape="RoundRectangle 16" BackgroundColor="#CC1A1A1E">
-            <VerticalStackLayout Spacing="6">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <Label Text="Riquadri e valori delle monete" TextColor="White" FontSize="14" VerticalOptions="Center" />
-                    <Switch Grid.Column="1" IsToggled="{Binding ShowBoxes}" />
-                </Grid>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <VerticalStackLayout VerticalOptions="Center">
-                        <Label Text="{Binding GridText}" TextColor="White" FontSize="14" />
-                        <Label Text="{Binding ScaleText}" TextColor="#99FFFFFF" FontSize="11" />
-                    </VerticalStackLayout>
-                    <Switch Grid.Column="1" IsToggled="{Binding ShowGrid}" IsEnabled="{Binding CanGrid}" />
-                </Grid>
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                    <Label Text="Vista" TextColor="White" FontSize="14" VerticalOptions="Center" />
-                    <Picker Grid.Column="1" ItemsSource="{Binding Views}" SelectedItem="{Binding SelectedView}" FontSize="14" TextColor="White"
-                            TitleColor="#99FFFFFF" HorizontalOptions="Fill" />
-                </Grid>
-            </VerticalStackLayout>
         </Border>
 
         <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" Color="White"

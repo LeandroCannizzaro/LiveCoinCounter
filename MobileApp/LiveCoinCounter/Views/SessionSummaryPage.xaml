@@ -115,17 +115,43 @@
             <!-- Mosaico annotato -->
             <Label Text="SUPERFICIE ACQUISITA" FontSize="11" FontAttributes="Bold" CharacterSpacing="1" IsVisible="{Binding HasMosaic}"
                    TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
-            <Border IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" BackgroundColor="#121214">
-                <Grid>
-                    <Image Source="{Binding MosaicImage}" Aspect="AspectFit">
-                        <Image.GestureRecognizers>
-                            <TapGestureRecognizer Command="{Binding OpenSurfaceCommand}" />
-                        </Image.GestureRecognizers>
-                    </Image>
-                    <Button Text="⤢ Schermo intero" Command="{Binding OpenSurfaceCommand}" HorizontalOptions="End" VerticalOptions="Start"
-                            Margin="8" Padding="12,4" HeightRequest="36" CornerRadius="18" FontSize="12" TextColor="White" BackgroundColor="#99000000"
+            <!-- Le opzioni della superficie: valgono anche a tutto schermo -->
+            <Border IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" Padding="14,10"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource Gray900}}">
+                <VerticalStackLayout Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label Text="Riquadri e valori delle monete" FontSize="14" VerticalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                        <Switch Grid.Column="1" IsToggled="{Binding Options.ShowBoxes}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout VerticalOptions="Center">
+                            <Label Text="{Binding Options.GridText}" FontSize="14"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                            <Label Text="{Binding Options.ScaleText}" FontSize="11"
+                                   TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                        </VerticalStackLayout>
+                        <Switch Grid.Column="1" IsToggled="{Binding Options.ShowGrid}" IsEnabled="{Binding Options.CanGrid}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <Label Text="Vista" FontSize="14" VerticalOptions="Center"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" />
+                        <Picker Grid.Column="1" ItemsSource="{Binding Options.Views}" SelectedItem="{Binding Options.SelectedView}" FontSize="14"
+                                TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark=White}" HorizontalOptions="Fill" />
+                    </Grid>
+                    <Button Text="⤢ Schermo intero" Command="{Binding OpenSurfaceCommand}" HorizontalOptions="Fill" HeightRequest="40" CornerRadius="20"
+                            FontSize="14" TextColor="White" BackgroundColor="{StaticResource Primary}"
                             SemanticProperties.Description="Apri la superficie acquisita a tutto schermo per ingrandirla" />
-                </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- La superficie, pulita -->
+            <Border IsVisible="{Binding HasMosaic}" StrokeThickness="0" StrokeShape="RoundRectangle 12" BackgroundColor="#121214">
+                <Image Source="{Binding MosaicImage}" Aspect="AspectFit">
+                    <Image.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenSurfaceCommand}" />
+                    </Image.GestureRecognizers>
+                </Image>
             </Border>
 
             <Label Text="{Binding MethodText}" FontSize="11" HorizontalTextAlignment="Center"

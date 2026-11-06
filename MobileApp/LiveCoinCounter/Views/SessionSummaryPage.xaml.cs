@@ -17,4 +17,10 @@ public partial class SessionSummaryPage : ContentPage
         base.OnAppearing();
         await _viewModel.LoadAsync();   // anche al ritorno da una correzione
     }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        _viewModel.Detach();
+    }
 }
